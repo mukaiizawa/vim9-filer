@@ -416,7 +416,7 @@ def UpdateStatusline(state: dict<any>)
 enddef
 
 def CurrentEntryIndex(state: dict<any>): number
-  return line('.') - 3
+  return line('.') - 2
 enddef
 
 def CurrentEntry(state: dict<any>): dict<any>
@@ -442,12 +442,12 @@ def JumpToPath(target_path: string)
   var state = state_by_bufnr[bufnr]
   for index in range(len(state.entries))
     if state.entries[index].path ==# target
-      cursor(index + 3, 1)
+      cursor(index + 2, 1)
       return
     endif
   endfor
 
-  cursor(3, 1)
+  cursor(2, 1)
 enddef
 
 def Render()
@@ -460,7 +460,7 @@ def Render()
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
 
-  var lines = [TruncateDisplayText(state.cwd, width), '']
+  var lines = [TruncateDisplayText(state.cwd, width)]
   for entry in state.entries
     add(lines, FormatEntryLine(state, entry, width))
   endfor
@@ -648,7 +648,7 @@ def OpenOrReuse(dir: string, reset_tree: bool = true)
   SetCwd(prev, dir, reset_tree)
   ClearInvalidMarks(prev)
   Render()
-  cursor(3, 1)
+  cursor(2, 1)
 enddef
 
 export def Open(dir_arg: string = '', reset_tree: bool = true)
