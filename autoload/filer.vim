@@ -501,7 +501,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> ~ <Cmd>call filer#GoHome()<CR>
   nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
   nnoremap <silent><buffer> l <Cmd>call filer#GoChild()<CR>
-  nnoremap <silent><buffer> <Space> <Cmd>call filer#ToggleMark()<CR>
+  nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
   nnoremap <silent><buffer> * <Cmd>call filer#ClearMarks()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteCurrent()<CR>
@@ -759,6 +759,7 @@ enddef
 export def ToggleMark()
   var state = EnsureState()
   var path = CurrentPath(state)
+  var current_index = CurrentEntryIndex(state)
   if empty(path)
     return
   endif
@@ -769,6 +770,10 @@ export def ToggleMark()
     state.marked_paths[path] = true
   endif
   RefreshState(state, path)
+  var target_line = min([current_index + 3, line('$')])
+  if target_line >= 2
+    cursor(target_line, 1)
+  endif
 enddef
 
 export def ClearMarks()
