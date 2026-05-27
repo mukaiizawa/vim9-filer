@@ -720,6 +720,7 @@ export def Enter()
   endif
 
   Open(entry.path)
+  JumpToTop()
 enddef
 
 export def ToggleTree()
