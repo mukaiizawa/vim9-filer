@@ -16,38 +16,45 @@ You can also pass a directory:
 :Filer path/to/dir
 ```
 
-This plugin also replaces Vim's default directory buffer behavior and opens `filer` automatically when entering a directory.
+Open the directory of the current buffer and jump to the current file with:
+
+```vim
+:FilerBufferDir
+```
+
+This plugin disables netrw and replaces Vim's default directory buffer behavior by opening `filer` automatically when entering a directory.
 
 ## Key Bindings
 
 - `<CR>`: Open the item under the cursor. Files are edited, directories are entered.
-- `<Tab>` / `t`: Toggle directory expansion.
+- `t`: Toggle directory expansion for the directory under the cursor.
 - `~`: Redraw with the home directory as the root.
 - `h`: Redraw with the parent directory as the root.
 - `l`: Open a file, or redraw with the directory under the cursor as the root.
-- `r`: Redraw.
+- `gg`: Jump to the first entry.
 - `q`: Close the explorer.
 - `<Space>`: Toggle multi-selection.
 - `*`: Clear the current selection.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
 - `d`: Delete the item on the current line.
-- `D`: Delete all selected items.
-- `R`: Rename the item on the current line.
-- `B`: Batch rename selected items one by one.
+- `r`: Rename the item on the current line.
 - `m`: Move the item on the current line.
 - `y`: Mark the current item or selected items for copy.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
 - `x`: Mark the current item or selected items for cut.
 - `p`: Paste into the current directory or the directory under the cursor.
-- `/`: Run a normal buffer search.
 - `<C-F>`: Recursively search for file names under the current directory.
 - `s`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Notes
 
+- The first line shows the current directory. Entries start on the second line.
+- A `../` entry is shown when the current directory has a parent.
+- Directory entries are shown before files for every sort mode.
+- Each entry shows name, file size, and modification time. Directories do not show a size.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
-- The statusline shows the sort mode, item count, search query, and clipboard state.
+- The statusline shows the current directory, sort mode, directory/file counts, mark count, search query, and clipboard state.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.
