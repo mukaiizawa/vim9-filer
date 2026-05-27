@@ -34,9 +34,9 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `gg`: Jump to the first entry.
 - `q`: Close the explorer.
 - `<Space>`: Toggle multi-selection.
-- `*`: Clear the current selection.
+- `*`: Mark all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
-- `d`: Delete the item on the current line.
+- `dd`: Delete the item on the current line.
 - `r`: Rename the item on the current line.
 - `m`: Move the item on the current line.
 - `y`: Mark the current item or selected items for copy.
@@ -54,6 +54,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - Each entry shows name, file size, and modification time. Directories do not show a size.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
+- Marks are cleared when changing directories or when the `filer` buffer is closed.
 - The statusline shows the current directory, sort mode, directory/file counts, mark count, search query, and clipboard state.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.

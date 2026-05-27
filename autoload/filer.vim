@@ -482,6 +482,7 @@ def Render()
 enddef
 
 def SetupBuffer()
+  var current_bufnr = bufnr('%')
   setlocal buftype=nofile
   setlocal bufhidden=hide
   setlocal noswapfile
@@ -495,6 +496,12 @@ def SetupBuffer()
   setlocal syntax=filer
   setlocal laststatus=2
 
+  augroup filer_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call filer#ClearMarksForCurrentBuffer()'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
+  augroup END
+
   nnoremap <silent><buffer> q <Cmd>close<CR>
   nnoremap <silent><buffer> <CR> <Cmd>call filer#Enter()<CR>
   nnoremap <silent><buffer> t <Cmd>call filer#ToggleTree()<CR>
@@ -502,9 +509,9 @@ def SetupBuffer()
   nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
   nnoremap <silent><buffer> l <Cmd>call filer#GoChild()<CR>
   nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
-  nnoremap <silent><buffer> * <Cmd>call filer#ClearMarks()<CR>
+  nnoremap <silent><buffer> * <Cmd>call filer#MarkAll()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
-  nnoremap <silent><buffer> d <Cmd>call filer#DeleteCurrent()<CR>
+  nnoremap <silent><buffer> dd <Cmd>call filer#DeleteCurrent()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameCurrent()<CR>
   nnoremap <silent><buffer> m <Cmd>call filer#MoveCurrent()<CR>
@@ -517,7 +524,11 @@ def SetupBuffer()
 enddef
 
 def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
+  var previous_dir = state.cwd
   state.cwd = NormalizeDir(dir)
+  if !empty(previous_dir) && previous_dir !=# state.cwd
+    state.marked_paths = {}
+  endif
   if reset_tree
     state.expanded_dirs = {}
     state.expanded_dirs[state.cwd] = true
@@ -779,6 +790,33 @@ enddef
 export def ClearMarks()
   var state = EnsureState()
   state.marked_paths = {}
+  RefreshState(state, CurrentPath(state))
+enddef
+
+export def ClearMarksForCurrentBuffer()
+  var bufnr = bufnr('%')
+  if !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+
+  state_by_bufnr[bufnr].marked_paths = {}
+enddef
+
+export def CleanupStateForCurrentBuffer()
+  var bufnr = bufnr('%')
+  if has_key(state_by_bufnr, bufnr)
+    remove(state_by_bufnr, bufnr)
+  endif
+enddef
+
+export def MarkAll()
+  var state = EnsureState()
+  state.marked_paths = {}
+  for entry in state.entries
+    if entry.kind !=# 'parent'
+      state.marked_paths[entry.path] = true
+    endif
+  endfor
   RefreshState(state, CurrentPath(state))
 enddef
 
