@@ -450,6 +450,10 @@ def JumpToPath(target_path: string)
   cursor(2, 1)
 enddef
 
+export def JumpToTop()
+  cursor(min([3, line('$')]), 1)
+enddef
+
 def Render()
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
@@ -501,6 +505,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> * <Cmd>call filer#ClearMarks()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteCurrent()<CR>
+  nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameCurrent()<CR>
   nnoremap <silent><buffer> m <Cmd>call filer#MoveCurrent()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
