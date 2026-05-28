@@ -149,6 +149,24 @@ def ParentDir(path: string): string
   return NormalizePath(fnamemodify(normalized, ':h'))
 enddef
 
+def FilesystemRoot(path: string): string
+  var normalized = NormalizePath(path)
+  if empty(normalized)
+    return NormalizeDir(getcwd())
+  endif
+
+  if normalized =~? '^[A-Z]:/'
+    return normalized[0 : 2]
+  endif
+
+  if normalized =~# '^//'
+    var match = matchstr(normalized, '^//[^/]\+/\?[^/]\+')
+    return empty(match) ? '/' : match
+  endif
+
+  return '/'
+enddef
+
 def RelativePath(root: string, path: string): string
   var normalized_root = NormalizeDir(root)
   var normalized_path = NormalizePath(path)
@@ -506,6 +524,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> <CR> <Cmd>call filer#Enter()<CR>
   nnoremap <silent><buffer> t <Cmd>call filer#ToggleTree()<CR>
   nnoremap <silent><buffer> ~ <Cmd>call filer#GoHome()<CR>
+  nnoremap <silent><buffer> \ <Cmd>call filer#GoRoot()<CR>
   nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
   nnoremap <silent><buffer> l <Cmd>call filer#GoChild()<CR>
   nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
@@ -747,6 +766,11 @@ enddef
 
 export def GoHome()
   Open('~')
+enddef
+
+export def GoRoot()
+  var state = EnsureState()
+  Open(FilesystemRoot(state.cwd))
 enddef
 
 export def GoChild()

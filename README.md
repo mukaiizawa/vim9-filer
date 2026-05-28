@@ -29,6 +29,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `<CR>`: Open the item under the cursor. Files are edited, directories are entered.
 - `t`: Toggle directory expansion for the directory under the cursor.
 - `~`: Redraw with the home directory as the root.
+- `\`: Redraw with the filesystem root as the root.
 - `h`: Redraw with the parent directory as the root.
 - `l`: Open a file, or redraw with the directory under the cursor as the root.
 - `gg`: Jump to the first entry.

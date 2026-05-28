@@ -7,6 +7,7 @@ endif
 syntax match FilerHeader /\%1l.*$/
 syntax match FilerParent /^\.\.\/$/
 syntax match FilerMarked /^\s*\zs\*\ze/
+syntax match FilerMarkedLine /^\s*\*.*/
 syntax match FilerTreeIcon /^\s*[* ]\zs[|+-]\ze /
 syntax match FilerDirectory /^\s*[* ][+-] .\+\/$/
 syntax match FilerFile /^\s*[* ]|.\+$/
