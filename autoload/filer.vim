@@ -34,6 +34,12 @@ def WarnBrokenLink(path: string)
   echohl None
 enddef
 
+def WarnUnreadableDir(path: string)
+  echohl WarningMsg
+  echomsg $'Cannot read directory: {path}'
+  echohl None
+enddef
+
 def IsWindows(): bool
   return has('win32') || has('win64')
 enddef
@@ -116,7 +122,12 @@ def JoinPath(base: string, child: string): string
     return NormalizePath(base)
   endif
 
-  return NormalizePath(TrimTrailingSeparators(base) .. '/' .. child)
+  var normalized_base = TrimTrailingSeparators(base)
+  if IsRootPath(normalized_base)
+    return NormalizePath(normalized_base .. child)
+  endif
+
+  return NormalizePath(normalized_base .. '/' .. child)
 enddef
 
 def IsAbsolutePath(path: string): bool
@@ -275,8 +286,17 @@ def CompareItems(dir: string, sort_mode: string, left_name: string, right_name: 
   return left_name ==# right_name ? 0 : (left_name <# right_name ? -1 : 1)
 enddef
 
+def SafeReadDir(dir: string): list<string>
+  try
+    return readdir(dir)
+  catch
+    WarnUnreadableDir(dir)
+    return []
+  endtry
+enddef
+
 def SortedChildren(dir: string, sort_mode: string): list<string>
-  var names = readdir(dir)
+  var names = SafeReadDir(dir)
   sort(names, (left, right) => CompareItems(dir, sort_mode, left, right))
   return names
 enddef
@@ -314,7 +334,7 @@ def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
   visited[dir_key] = true
   state.expanded_dirs[dir] = true
 
-  for name in readdir(dir)
+  for name in SafeReadDir(dir)
     var path = JoinPath(dir, name)
     if IsDirectory(path)
       ExpandSubtreeRecursive(state, path, visited)
@@ -724,23 +744,15 @@ def Confirm(message: string): bool
   return confirm(message, "&Yes\n&No", 2) == 1
 enddef
 
-def CanonicalizeManagedBufferName(name: string): string
-  var match = matchlist(name, '^\(\[filer\%(-rename\)\?\] \)\(.\{-}\)\%( (\d\+)\)\?$')
-  if empty(match)
-    return HasCaseInsensitivePaths() ? tolower(name) : name
-  endif
-
-  var prefix = match[1]
-  var dir = NormalizePath(match[2])
-  var suffix = match[3]
-  var canonical = prefix .. dir .. suffix
+def CanonicalizeBufferName(name: string): string
+  var canonical = NormalizeSeparators(name)
   return HasCaseInsensitivePaths() ? tolower(canonical) : canonical
 enddef
 
 def BufferNameInUse(name: string, current_bufnr: number): bool
-  var target = CanonicalizeManagedBufferName(name)
+  var target = CanonicalizeBufferName(name)
   for info in getbufinfo()
-    if info.bufnr != current_bufnr && CanonicalizeManagedBufferName(bufname(info.bufnr)) ==# target
+    if info.bufnr != current_bufnr && CanonicalizeBufferName(bufname(info.bufnr)) ==# target
       return true
     endif
   endfor
