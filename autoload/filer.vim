@@ -695,6 +695,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> \ <Cmd>call filer#GoRoot()<CR>
   nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
   nnoremap <silent><buffer> l <Cmd>call filer#GoChild()<CR>
+  nnoremap <silent><buffer> . <Cmd>call filer#ReopenCurrentDir()<CR>
   nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
   nnoremap <silent><buffer> * <Cmd>call filer#MarkAll()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
@@ -1122,6 +1123,12 @@ export def GoChild()
   endif
 
   Open(entry.path)
+enddef
+
+export def ReopenCurrentDir()
+  var state = EnsureState()
+  var current_dir = state.cwd
+  Open(current_dir)
 enddef
 
 export def ToggleMark()
