@@ -28,6 +28,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 
 - `<CR>`: Open the item under the cursor. Files are edited, directories are entered.
 - `t`: Toggle directory expansion for the directory under the cursor.
+- `T`: Recursively toggle expansion for the directory under the cursor.
 - `~`: Redraw with the home directory as the root.
 - `\`: Redraw with the filesystem root as the root.
 - `h`: Redraw with the parent directory as the root.
@@ -35,12 +36,12 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `gg`: Jump to the first entry.
 - `q`: Close the explorer.
 - `<Space>`: Toggle multi-selection.
-- `*`: Mark all items in the current view.
+- `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
 - `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
-- `r`: Rename the item on the current line.
+- `r`: Mark the item on the current line when nothing is marked; otherwise open a batch rename buffer for all marked items.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
-- `<C-F>`: Recursively search for file names under the current directory.
+- `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `s`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Notes
@@ -52,6 +53,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
+- Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - The statusline shows the current directory, sort mode, directory/file counts, mark count, and search query.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.

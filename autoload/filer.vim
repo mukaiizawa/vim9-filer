@@ -279,6 +279,31 @@ def AddTreeEntries(entries: list<dict<any>>, dir: string, depth: number, state: 
   endfor
 enddef
 
+def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
+  var dir_key = PathKey(dir)
+  if has_key(visited, dir_key)
+    return
+  endif
+
+  visited[dir_key] = true
+  state.expanded_dirs[dir] = true
+
+  for name in readdir(dir)
+    var path = JoinPath(dir, name)
+    if IsDirectory(path)
+      ExpandSubtreeRecursive(state, path, visited)
+    endif
+  endfor
+enddef
+
+def CollapseSubtreeRecursive(state: dict<any>, dir: string)
+  for path in copy(keys(state.expanded_dirs))
+    if path !=# state.cwd && IsSameOrChildPath(dir, path)
+      remove(state.expanded_dirs, path)
+    endif
+  endfor
+enddef
+
 def SearchTree(dir: string, root: string, state: dict<any>, entries: list<dict<any>>)
   for name in SortedChildren(dir, state.sort_mode)
     var path = JoinPath(dir, name)
@@ -541,6 +566,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> q <Cmd>close<CR>
   nnoremap <silent><buffer> <CR> <Cmd>call filer#Enter()<CR>
   nnoremap <silent><buffer> t <Cmd>call filer#ToggleTree()<CR>
+  nnoremap <silent><buffer> T <Cmd>call filer#ExpandTreeRecursive()<CR>
   nnoremap <silent><buffer> ~ <Cmd>call filer#GoHome()<CR>
   nnoremap <silent><buffer> \ <Cmd>call filer#GoRoot()<CR>
   nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
@@ -901,6 +927,25 @@ export def ToggleTree()
   endif
 
   state.expanded_dirs[entry.path] = !get(state.expanded_dirs, entry.path, false)
+  RefreshState(state, entry.path)
+enddef
+
+export def ExpandTreeRecursive()
+  var state = EnsureState()
+  if !empty(state.file_search_query)
+    return
+  endif
+
+  var entry = CurrentEntry(state)
+  if empty(entry) || entry.kind !=# 'dir'
+    return
+  endif
+
+  if get(state.expanded_dirs, entry.path, false)
+    CollapseSubtreeRecursive(state, entry.path)
+  else
+    ExpandSubtreeRecursive(state, entry.path, {})
+  endif
   RefreshState(state, entry.path)
 enddef
 
