@@ -28,6 +28,12 @@ def Notify(message: string)
   echo message
 enddef
 
+def WarnBrokenLink(path: string)
+  echohl WarningMsg
+  echomsg $'Broken symbolic link: {path}'
+  echohl None
+enddef
+
 def IsWindows(): bool
   return has('win32') || has('win64')
 enddef
@@ -152,6 +158,10 @@ enddef
 
 def PathExists(path: string): bool
   return filereadable(path) || isdirectory(path) || getftype(path) ==# 'link'
+enddef
+
+def IsBrokenLink(path: string): bool
+  return getftype(path) ==# 'link' && !filereadable(path) && !isdirectory(path)
 enddef
 
 def IsDirectory(path: string): bool
@@ -979,6 +989,10 @@ export def Enter()
   endif
 
   if entry.kind ==# 'file'
+    if IsBrokenLink(entry.path)
+      WarnBrokenLink(entry.path)
+      return
+    endif
     execute 'edit ' .. fnameescape(entry.path)
     return
   endif
@@ -1050,6 +1064,10 @@ export def GoChild()
   endif
 
   if entry.kind ==# 'file'
+    if IsBrokenLink(entry.path)
+      WarnBrokenLink(entry.path)
+      return
+    endif
     execute 'edit ' .. fnameescape(entry.path)
     return
   endif
