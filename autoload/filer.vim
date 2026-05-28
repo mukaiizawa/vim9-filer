@@ -1,6 +1,7 @@
 vim9script
 
 var state_by_bufnr: dict<any> = {}
+var rename_state_by_bufnr: dict<any> = {}
 
 const TREE_INDENTATION = 1
 const TREE_LEAF_ICON = '|'
@@ -124,6 +125,15 @@ def NormalizePath(path: string): string
   return TrimTrailingSeparators(fnamemodify(ExpandHomePath(path), ':p'))
 enddef
 
+def HasCaseInsensitivePaths(): bool
+  return has('win32') || has('win64')
+enddef
+
+def PathKey(path: string): string
+  var normalized = NormalizePath(path)
+  return HasCaseInsensitivePaths() ? tolower(normalized) : normalized
+enddef
+
 def PathExists(path: string): bool
   return filereadable(path) || isdirectory(path) || getftype(path) ==# 'link'
 enddef
@@ -147,6 +157,17 @@ def ParentDir(path: string): string
   endif
 
   return NormalizePath(fnamemodify(normalized, ':h'))
+enddef
+
+def IsSameOrChildPath(parent: string, child: string): bool
+  var normalized_parent = PathKey(parent)
+  var normalized_child = PathKey(child)
+  if normalized_parent ==# normalized_child
+    return true
+  endif
+
+  var prefix = IsRootPath(normalized_parent) ? normalized_parent : normalized_parent .. '/'
+  return stridx(normalized_child, prefix) == 0
 enddef
 
 def FilesystemRoot(path: string): string
@@ -529,7 +550,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
-  nnoremap <silent><buffer> r <Cmd>call filer#RenameCurrent()<CR>
+  nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
   nnoremap <silent><buffer> <C-F> <Cmd>call filer#SearchFiles()<CR>
   nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
@@ -590,6 +611,12 @@ def DeletePath(path: string)
   endif
 enddef
 
+def MovePath(source: string, destination: string)
+  if rename(source, destination) != 0
+    throw $'Failed to move {source} to {destination}'
+  endif
+enddef
+
 def Prompt(prompt: string, default_value: string = ''): string
   return input(prompt, default_value)
 enddef
@@ -621,6 +648,171 @@ def MakeBufferName(dir: string, current_bufnr: number): string
     candidate = $'{base} ({suffix})'
   endwhile
   return candidate
+enddef
+
+def MakeRenameBufferName(cwd: string, current_bufnr: number): string
+  var base = '[filer-rename] ' .. cwd
+  if !BufferNameInUse(base, current_bufnr)
+    return base
+  endif
+
+  var suffix = 2
+  var candidate = $'{base} ({suffix})'
+  while BufferNameInUse(candidate, current_bufnr)
+    suffix += 1
+    candidate = $'{base} ({suffix})'
+  endwhile
+  return candidate
+enddef
+
+def MakeTemporaryMovePath(path: string): string
+  var candidate = path .. '.filer-tmp'
+  var suffix = 2
+  while PathExists(candidate)
+    candidate = $'{path}.filer-tmp.{suffix}'
+    suffix += 1
+  endwhile
+  return candidate
+enddef
+
+def ValidateRenameSources(paths: list<string>)
+  for i in range(len(paths))
+    for j in range(i + 1, len(paths) - 1)
+      if IsSameOrChildPath(paths[i], paths[j]) || IsSameOrChildPath(paths[j], paths[i])
+        throw $'Cannot batch rename nested paths at the same time: {paths[i]} / {paths[j]}'
+      endif
+    endfor
+  endfor
+enddef
+
+def SetupRenameBuffer(context: dict<any>)
+  var current_bufnr = bufnr('%')
+  rename_state_by_bufnr[current_bufnr] = context
+
+  setlocal buftype=acwrite
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal nowrap
+  setlocal filetype=filer_rename
+  setlocal syntax=
+
+  augroup filer_rename_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyRenameBuffer()'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
+  augroup END
+
+  nnoremap <silent><buffer> q <Cmd>bwipeout<CR>
+enddef
+
+def OpenRenameBuffer(state: dict<any>, paths: list<string>)
+  ValidateRenameSources(paths)
+
+  var filer_bufnr = bufnr('%')
+  enew
+  var rename_bufnr = bufnr('%')
+  execute 'file ' .. fnameescape(MakeRenameBufferName(state.cwd, rename_bufnr))
+  SetupRenameBuffer({
+    filer_bufnr: filer_bufnr,
+    cwd: state.cwd,
+    source_paths: copy(paths),
+  })
+
+  setline(1, paths)
+  if line('$') > len(paths)
+    deletebufline(rename_bufnr, len(paths) + 1, line('$'))
+  endif
+  setlocal nomodified
+  cursor(1, 1)
+enddef
+
+def CollectRenameDestinations(context: dict<any>): list<string>
+  var source_paths = context.source_paths
+  var lines = getline(1, '$')
+  if len(lines) != len(source_paths)
+    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
+  endif
+
+  var destinations: list<string> = []
+  for line_text in lines
+    if empty(line_text)
+      throw 'Rename destination cannot be empty'
+    endif
+    add(destinations, ResolvePath(context.cwd, line_text))
+  endfor
+  return destinations
+enddef
+
+def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>): list<string>
+  var source_set: dict<bool> = {}
+  var destination_set: dict<bool> = {}
+  var staged_moves: list<dict<any>> = []
+  var final_moves: list<dict<any>> = []
+  var renamed_paths: list<string> = []
+
+  for path in source_paths
+    source_set[PathKey(path)] = true
+  endfor
+
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    var source_key = PathKey(source)
+    var destination_key = PathKey(destination)
+
+    if has_key(destination_set, destination_key)
+      throw $'Duplicate destination: {destination}'
+    endif
+    destination_set[destination_key] = true
+
+    if source_key ==# destination_key && source ==# destination
+      add(renamed_paths, source)
+      continue
+    endif
+
+    if PathExists(destination) && !has_key(source_set, destination_key)
+      throw $'Destination already exists: {destination}'
+    endif
+  endfor
+
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    var source_key = PathKey(source)
+    var destination_key = PathKey(destination)
+    if source_key ==# destination_key && source ==# destination
+      continue
+    endif
+
+    if source_key ==# destination_key || has_key(source_set, destination_key)
+      var temp_path = MakeTemporaryMovePath(source)
+      MovePath(source, temp_path)
+      add(staged_moves, {
+        temp_path: temp_path,
+        destination: destination,
+      })
+      add(renamed_paths, destination)
+      continue
+    endif
+
+    add(final_moves, {
+      source: source,
+      destination: destination,
+    })
+    add(renamed_paths, destination)
+  endfor
+
+  for move in final_moves
+    EnsureParentDir(move.destination)
+    MovePath(move.source, move.destination)
+  endfor
+
+  for move in staged_moves
+    EnsureParentDir(move.destination)
+    MovePath(move.temp_path, move.destination)
+  endfor
+
+  return renamed_paths
 enddef
 
 def OpenOrReuse(dir: string, reset_tree: bool = true)
@@ -789,6 +981,13 @@ export def CleanupStateForCurrentBuffer()
   endif
 enddef
 
+export def CleanupRenameBufferForCurrentBuffer()
+  var bufnr = bufnr('%')
+  if has_key(rename_state_by_bufnr, bufnr)
+    remove(rename_state_by_bufnr, bufnr)
+  endif
+enddef
+
 export def MarkAll()
   var state = EnsureState()
   var all_marked = true
@@ -896,6 +1095,47 @@ export def DeleteMarked()
   RefreshState(state, state.cwd)
 enddef
 
+export def RenameOrMark()
+  var state = EnsureState()
+  var paths = sort(keys(state.marked_paths))
+  if len(paths) > 0
+    OpenRenameBuffer(state, paths)
+    return
+  endif
+
+  var path = CurrentPath(state)
+  if empty(path)
+    return
+  endif
+
+  state.marked_paths[path] = true
+  Render()
+enddef
+
+export def ApplyRenameBuffer()
+  var rename_bufnr = bufnr('%')
+  if !has_key(rename_state_by_bufnr, rename_bufnr)
+    return
+  endif
+
+  var context = rename_state_by_bufnr[rename_bufnr]
+  var destination_paths = CollectRenameDestinations(context)
+  var renamed_paths = ApplyBulkRename(context.source_paths, destination_paths)
+  setlocal nomodified
+
+  var filer_bufnr = context.filer_bufnr
+  if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
+    Notify($'Renamed {len(renamed_paths)} entries')
+    return
+  endif
+
+  execute 'buffer ' .. filer_bufnr
+  var state = state_by_bufnr[filer_bufnr]
+  state.marked_paths = {}
+  RefreshState(state, len(renamed_paths) > 0 ? renamed_paths[0] : state.cwd)
+  execute 'bwipeout ' .. rename_bufnr
+enddef
+
 export def RenameCurrent()
   var state = EnsureState()
   var path = CurrentPath(state)
@@ -914,7 +1154,7 @@ export def RenameCurrent()
     return
   endif
 
-  rename(path, dest)
+  MovePath(path, dest)
   if IsMarked(state, path)
     RemoveMark(state, path)
     state.marked_paths[dest] = true
@@ -948,7 +1188,7 @@ export def RenameMarked()
       continue
     endif
 
-    rename(path, dest)
+    MovePath(path, dest)
     add(renamed, dest)
   endfor
 
