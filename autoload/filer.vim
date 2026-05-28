@@ -703,7 +703,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> x <Cmd>call filer#OpenInSystemFileManager()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
-  nnoremap <silent><buffer> <C-F> <Cmd>call filer#SearchFiles()<CR>
+  nnoremap <silent><buffer><expr> <C-F> filer#HandleCtrlF()
   nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
 enddef
 
@@ -711,6 +711,7 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   var previous_dir = state.cwd
   state.cwd = NormalizeDir(dir)
   if !empty(previous_dir) && previous_dir !=# state.cwd
+    state.file_search_query = ''
     state.marked_paths = {}
   endif
   if reset_tree
@@ -1400,6 +1401,11 @@ export def SearchFiles()
   var query = Prompt('Search filename: ', state.file_search_query)
   state.file_search_query = query
   RefreshState(state, state.cwd)
+enddef
+
+export def HandleCtrlF(): string
+  var state = EnsureState()
+  return empty(state.file_search_query) ? "\<Cmd>call filer#SearchFiles()\<CR>" : "\<C-F>"
 enddef
 
 export def CycleSort()
