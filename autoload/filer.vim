@@ -806,8 +806,8 @@ export def ToggleMark()
     state.marked_paths[path] = true
   endif
   RefreshState(state, path)
-  var target_line = min([current_index + 3, line('$')])
-  if target_line >= 2
+  var target_line = current_index + 3 > line('$') ? 3 : current_index + 3
+  if target_line >= 3
     cursor(target_line, 1)
   endif
 enddef
