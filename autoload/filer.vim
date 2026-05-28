@@ -558,6 +558,41 @@ def StartDetached(cmd: list<string>): bool
   endtry
 enddef
 
+def StartDetachedCommand(cmd: string): bool
+  if !exists('*job_start')
+    return false
+  endif
+
+  try
+    var job = job_start(cmd, {detach: true})
+    return type(job) == v:t_job
+  catch
+    return false
+  endtry
+enddef
+
+def RunCommand(cmd: string): bool
+  try
+    system(cmd)
+    return v:shell_error == 0
+  catch
+    return false
+  endtry
+enddef
+
+def DoubleQuoteForCmd(path: string): string
+  return '"' .. substitute(path, '"', '""', 'g') .. '"'
+enddef
+
+def OpenWithWindowsExplorer(path: string): bool
+  var native = NativePath(path)
+  var target = DoubleQuoteForCmd(native)
+  var explorer_arg = IsDirectory(path) ? target : '/select,' .. target
+  var cmd = 'cmd.exe /c start "" explorer.exe ' .. explorer_arg
+
+  return StartDetachedCommand(cmd) || RunCommand(cmd)
+enddef
+
 def OpenWithSystemFileManager(path: string): bool
   var normalized = NormalizePath(path)
   if empty(normalized)
@@ -565,10 +600,7 @@ def OpenWithSystemFileManager(path: string): bool
   endif
 
   if IsWindows()
-    if IsDirectory(normalized)
-      return StartDetached(['explorer', NativePath(normalized)])
-    endif
-    return StartDetached(['explorer', '/select,' .. NativePath(normalized)])
+    return OpenWithWindowsExplorer(normalized)
   endif
 
   if IsMac()
