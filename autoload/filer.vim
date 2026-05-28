@@ -1412,6 +1412,10 @@ enddef
 export def OpenInSystemFileManager()
   var state = EnsureState()
   var path = state.cwd
+  var entry = CurrentEntry(state)
+  if !empty(entry) && (entry.kind ==# 'dir' || entry.kind ==# 'parent')
+    path = entry.path
+  endif
   if empty(path)
     return
   endif
