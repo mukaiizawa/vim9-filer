@@ -836,6 +836,25 @@ enddef
 
 export def MarkAll()
   var state = EnsureState()
+  var all_marked = true
+  var has_markable_entry = false
+
+  for entry in state.entries
+    if entry.kind !=# 'parent'
+      has_markable_entry = true
+      if !IsMarked(state, entry.path)
+        all_marked = false
+        break
+      endif
+    endif
+  endfor
+
+  if all_marked && has_markable_entry
+    state.marked_paths = {}
+    RefreshState(state, CurrentPath(state))
+    return
+  endif
+
   state.marked_paths = {}
   for entry in state.entries
     if entry.kind !=# 'parent'
