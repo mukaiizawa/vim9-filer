@@ -28,6 +28,14 @@ def Notify(message: string)
   echo message
 enddef
 
+def IsWindows(): bool
+  return has('win32') || has('win64')
+enddef
+
+def IsMac(): bool
+  return has('mac') || has('macunix')
+enddef
+
 def NormalizeSeparators(path: string): string
   return substitute(path, '\\', '/', 'g')
 enddef
@@ -134,7 +142,7 @@ def NormalizePath(path: string): string
 enddef
 
 def HasCaseInsensitivePaths(): bool
-  return has('win32') || has('win64')
+  return IsWindows()
 enddef
 
 def PathKey(path: string): string
@@ -499,6 +507,54 @@ def CurrentPath(state: dict<any>): string
   return empty(entry) ? '' : entry.path
 enddef
 
+def CurrentPathOrCwd(state: dict<any>): string
+  return line('.') == 1 ? state.cwd : CurrentPath(state)
+enddef
+
+def NativePath(path: string): string
+  return IsWindows() ? substitute(path, '/', '\\', 'g') : path
+enddef
+
+def StartDetached(cmd: list<string>): bool
+  if !exists('*job_start')
+    return false
+  endif
+
+  try
+    var job = job_start(cmd, {detach: true})
+    return type(job) == v:t_job
+  catch
+    return false
+  endtry
+enddef
+
+def OpenWithSystemFileManager(path: string): bool
+  var normalized = NormalizePath(path)
+  if empty(normalized)
+    return false
+  endif
+
+  if IsWindows()
+    if IsDirectory(normalized)
+      return StartDetached(['explorer', NativePath(normalized)])
+    endif
+    return StartDetached(['explorer', '/select,' .. NativePath(normalized)])
+  endif
+
+  if IsMac()
+    if IsDirectory(normalized)
+      return StartDetached(['open', normalized])
+    endif
+    return StartDetached(['open', '-R', normalized])
+  endif
+
+  var target = IsDirectory(normalized) ? normalized : ParentDir(normalized)
+  if executable('xdg-open') != 1
+    return false
+  endif
+  return StartDetached(['xdg-open', target])
+enddef
+
 def JumpToPath(target_path: string)
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
@@ -583,6 +639,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
+  nnoremap <silent><buffer> x <Cmd>call filer#OpenInSystemFileManager()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
   nnoremap <silent><buffer> <C-F> <Cmd>call filer#SearchFiles()<CR>
   nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
@@ -1252,7 +1309,7 @@ enddef
 
 export def YankCurrentPathToClipboard()
   var state = EnsureState()
-  var path = line('.') == 1 ? state.cwd : CurrentPath(state)
+  var path = CurrentPathOrCwd(state)
   if empty(path)
     return
   endif
@@ -1274,6 +1331,21 @@ export def CycleSort()
   var current_index = index(SORT_MODES, state.sort_mode)
   state.sort_mode = SORT_MODES[(current_index + 1) % len(SORT_MODES)]
   RefreshState(state, CurrentPath(state))
+enddef
+
+export def OpenInSystemFileManager()
+  var state = EnsureState()
+  var path = state.cwd
+  if empty(path)
+    return
+  endif
+
+  if OpenWithSystemFileManager(path)
+    Notify($'Opened in system file manager: {path}')
+    return
+  endif
+
+  echoerr $'Failed to open system file manager for: {path}'
 enddef
 
 export def MaybeOpenDir(path: string)

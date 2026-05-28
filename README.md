@@ -40,6 +40,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
 - `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Mark the item on the current line when nothing is marked; otherwise open a batch rename buffer for all marked items.
+- `x`: Open the current directory in the OS file manager.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `s`: Cycle sort mode: `name` -> `size` -> `time`.
@@ -58,5 +59,6 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.
+- `x` on WSL is currently unsupported.
 - Home directory resolution on Windows prefers `expand('~')`, then falls back to `HOME`, `USERPROFILE`, or `HOMEDRIVE` + `HOMEPATH`.
 - Renaming across drives on Windows is not supported.
