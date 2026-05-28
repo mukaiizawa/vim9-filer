@@ -871,7 +871,7 @@ export def DeleteOrMark()
   endif
 
   state.marked_paths[path] = true
-  Render(state)
+  Render()
 enddef
 
 export def DeleteMarked()
