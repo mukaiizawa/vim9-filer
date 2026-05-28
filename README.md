@@ -37,7 +37,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `<Space>`: Toggle multi-selection.
 - `*`: Mark all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
-- `dd`: Delete the item on the current line.
+- `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Rename the item on the current line.
 - `m`: Move the item on the current line.
 - `y`: Mark the current item or selected items for copy.
