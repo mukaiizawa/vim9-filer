@@ -54,7 +54,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - Selected items are marked with `*`.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
-- The statusline shows the current directory, sort mode, directory/file counts, mark count, and search query.
+- The statusline shows the current directory on the left, and the sort mode plus `[current/total]` position on the right.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.

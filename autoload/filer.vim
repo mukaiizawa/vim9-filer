@@ -13,7 +13,15 @@ const SORT_MODES = ['name', 'size', 'time']
 const TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M'
 
 def EscapeStatusline(text: string): string
-  return substitute(substitute(text, '%', '%%', 'g'), ' ', '\\ ', 'g')
+  return substitute(text, '%', '%%', 'g')
+enddef
+
+def DisplayDir(path: string): string
+  if empty(path) || IsRootPath(path)
+    return path
+  endif
+
+  return path .. '/'
 enddef
 
 def Notify(message: string)
@@ -458,22 +466,20 @@ def MarkCount(state: dict<any>): number
   return len(keys(state.marked_paths))
 enddef
 
+def CurrentEntryPosition(state: dict<any>): number
+  var total = len(state.entries)
+  if total == 0
+    return 0
+  endif
+
+  return min([max([line('.') - 1, 1]), total])
+enddef
+
 def UpdateStatusline(state: dict<any>)
-  var dir_count = 0
-  var file_count = 0
-
-  for entry in state.entries
-    if entry.kind ==# 'dir'
-      dir_count += 1
-    elseif entry.kind ==# 'file'
-      file_count += 1
-    endif
-  endfor
-
-  var search = empty(state.file_search_query) ? '' : $' search:{state.file_search_query}'
-  &l:statusline = EscapeStatusline(
-    $' filer {state.cwd}  sort:{state.sort_mode} dirs:{dir_count} files:{file_count} marks:{MarkCount(state)}{search} '
-  )
+  var total = len(state.entries)
+  var left = DisplayDir(state.cwd)
+  var right = $'{state.sort_mode} [{CurrentEntryPosition(state)}/{total}]'
+  &l:statusline = EscapeStatusline(left) .. '%=' .. EscapeStatusline(right)
 enddef
 
 def CurrentEntryIndex(state: dict<any>): number
