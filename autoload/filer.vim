@@ -714,9 +714,23 @@ def Confirm(message: string): bool
   return confirm(message, "&Yes\n&No", 2) == 1
 enddef
 
+def CanonicalizeManagedBufferName(name: string): string
+  var match = matchlist(name, '^\(\[filer\%(-rename\)\?\] \)\(.\{-}\)\%( (\d\+)\)\?$')
+  if empty(match)
+    return HasCaseInsensitivePaths() ? tolower(name) : name
+  endif
+
+  var prefix = match[1]
+  var dir = NormalizePath(match[2])
+  var suffix = match[3]
+  var canonical = prefix .. dir .. suffix
+  return HasCaseInsensitivePaths() ? tolower(canonical) : canonical
+enddef
+
 def BufferNameInUse(name: string, current_bufnr: number): bool
+  var target = CanonicalizeManagedBufferName(name)
   for info in getbufinfo()
-    if info.bufnr != current_bufnr && bufname(info.bufnr) ==# name
+    if info.bufnr != current_bufnr && CanonicalizeManagedBufferName(bufname(info.bufnr)) ==# target
       return true
     endif
   endfor
