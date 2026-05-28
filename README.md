@@ -33,6 +33,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `\`: Redraw with the filesystem root as the root.
 - `h`: Redraw with the parent directory as the root.
 - `l`: Open a file, or redraw with the directory under the cursor as the root.
+- `.`: Re-open the current directory and redraw the view.
 - `gg`: Jump to the first entry.
 - `q`: Close the explorer.
 - `<Space>`: Toggle multi-selection.
