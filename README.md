@@ -39,11 +39,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
 - `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Rename the item on the current line.
-- `m`: Move the item on the current line.
-- `y`: Mark the current item or selected items for copy.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
-- `x`: Mark the current item or selected items for cut.
-- `p`: Paste into the current directory or the directory under the cursor.
 - `<C-F>`: Recursively search for file names under the current directory.
 - `s`: Cycle sort mode: `name` -> `size` -> `time`.
 
@@ -56,9 +52,9 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
-- The statusline shows the current directory, sort mode, directory/file counts, mark count, search query, and clipboard state.
+- The statusline shows the current directory, sort mode, directory/file counts, mark count, and search query.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.
 - Home directory resolution on Windows prefers `expand('~')`, then falls back to `HOME`, `USERPROFILE`, or `HOMEDRIVE` + `HOMEPATH`.
-- Moving or renaming across drives on Windows is not supported.
+- Renaming across drives on Windows is not supported.

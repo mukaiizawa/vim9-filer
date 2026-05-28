@@ -188,8 +188,6 @@ def MakeState(dir: string): dict<any>
     entries: [],
     expanded_dirs: {dir: true},
     marked_paths: {},
-    clipboard_paths: [],
-    clipboard_mode: '',
     file_search_query: '',
     sort_mode: 'name',
   }
@@ -427,9 +425,8 @@ def UpdateStatusline(state: dict<any>)
   endfor
 
   var search = empty(state.file_search_query) ? '' : $' search:{state.file_search_query}'
-  var clip = empty(state.clipboard_mode) ? '' : $' clip:{state.clipboard_mode}({len(state.clipboard_paths)})'
   &l:statusline = EscapeStatusline(
-    $' filer {state.cwd}  sort:{state.sort_mode} dirs:{dir_count} files:{file_count} marks:{MarkCount(state)}{search}{clip} '
+    $' filer {state.cwd}  sort:{state.sort_mode} dirs:{dir_count} files:{file_count} marks:{MarkCount(state)}{search} '
   )
 enddef
 
@@ -533,11 +530,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameCurrent()<CR>
-  nnoremap <silent><buffer> m <Cmd>call filer#MoveCurrent()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
-  nnoremap <silent><buffer> y <Cmd>call filer#Yank()<CR>
-  nnoremap <silent><buffer> x <Cmd>call filer#Cut()<CR>
-  nnoremap <silent><buffer> p <Cmd>call filer#Paste()<CR>
   nnoremap <silent><buffer> <C-F> <Cmd>call filer#SearchFiles()<CR>
   nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
 enddef
@@ -568,15 +561,6 @@ def RefreshState(state: dict<any>, cursor_path: string = '')
   JumpToPath(cursor_path)
 enddef
 
-def SelectedPaths(state: dict<any>): list<string>
-  if MarkCount(state) > 0
-    return sort(keys(state.marked_paths))
-  endif
-
-  var current_path = CurrentPath(state)
-  return empty(current_path) ? [] : [current_path]
-enddef
-
 def RemoveMark(state: dict<any>, path: string)
   if has_key(state.marked_paths, path)
     remove(state.marked_paths, path)
@@ -591,40 +575,11 @@ def ClearInvalidMarks(state: dict<any>)
   endfor
 enddef
 
-def CurrentTargetDirectory(state: dict<any>): string
-  var entry = CurrentEntry(state)
-  if !empty(entry) && entry.kind ==# 'dir'
-    return entry.path
-  endif
-  return state.cwd
-enddef
-
 def EnsureParentDir(path: string)
   var parent = ParentDir(path)
   if !isdirectory(parent)
     mkdir(parent, 'p')
   endif
-enddef
-
-def CopyFile(src: string, dest: string)
-  EnsureParentDir(dest)
-  writefile(readfile(src, 'b'), dest, 'b')
-enddef
-
-def CopyPath(src: string, dest: string)
-  if PathExists(dest)
-    throw $'Destination already exists: {dest}'
-  endif
-
-  if IsDirectory(src)
-    mkdir(dest, 'p')
-    for name in readdir(src)
-      CopyPath(JoinPath(src, name), JoinPath(dest, name))
-    endfor
-    return
-  endif
-
-  CopyFile(src, dest)
 enddef
 
 def DeletePath(path: string)
@@ -1004,46 +959,6 @@ export def RenameMarked()
   RefreshState(state, len(renamed) > 0 ? renamed[0] : state.cwd)
 enddef
 
-export def MoveCurrent()
-  var state = EnsureState()
-  var path = CurrentPath(state)
-  if empty(path)
-    return
-  endif
-
-  var dest = Prompt('Move to: ', JoinPath(state.cwd, Basename(path)))
-  if empty(dest)
-    return
-  endif
-  dest = ResolvePath(state.cwd, dest)
-
-  if PathExists(dest)
-    echoerr $'Already exists: {dest}'
-    return
-  endif
-
-  EnsureParentDir(dest)
-  rename(path, dest)
-  if IsMarked(state, path)
-    RemoveMark(state, path)
-    state.marked_paths[dest] = true
-  endif
-  RefreshState(state, dest)
-enddef
-
-export def Yank()
-  var state = EnsureState()
-  var paths = SelectedPaths(state)
-  if len(paths) == 0
-    return
-  endif
-
-  state.clipboard_paths = paths
-  state.clipboard_mode = 'copy'
-  Notify($'Yanked {len(paths)} path(s)')
-  RefreshState(state, paths[0])
-enddef
-
 export def YankCurrentPathToClipboard()
   var state = EnsureState()
   var path = line('.') == 1 ? state.cwd : CurrentPath(state)
@@ -1054,60 +969,6 @@ export def YankCurrentPathToClipboard()
   setreg('+', path)
   Notify($'Copied to clipboard: {path}')
   RefreshState(state, path)
-enddef
-
-export def Cut()
-  var state = EnsureState()
-  var paths = SelectedPaths(state)
-  if len(paths) == 0
-    return
-  endif
-
-  state.clipboard_paths = paths
-  state.clipboard_mode = 'cut'
-  Notify($'Cut {len(paths)} path(s)')
-  RefreshState(state, paths[0])
-enddef
-
-export def Paste()
-  var state = EnsureState()
-  if empty(state.clipboard_mode) || len(state.clipboard_paths) == 0
-    Notify('Clipboard is empty')
-    return
-  endif
-
-  var target_dir = CurrentTargetDirectory(state)
-  var pasted: list<string> = []
-
-  try
-    for src in state.clipboard_paths
-      if !PathExists(src)
-        continue
-      endif
-
-      var dest = JoinPath(target_dir, Basename(src))
-      if state.clipboard_mode ==# 'copy'
-        CopyPath(src, dest)
-      else
-        if PathExists(dest)
-          throw $'Destination already exists: {dest}'
-        endif
-        rename(src, dest)
-      endif
-      add(pasted, dest)
-    endfor
-  catch
-    echoerr v:exception
-    return
-  endtry
-
-  if state.clipboard_mode ==# 'cut'
-    state.clipboard_mode = ''
-    state.clipboard_paths = []
-    state.marked_paths = {}
-  endif
-
-  RefreshState(state, len(pasted) > 0 ? pasted[0] : target_dir)
 enddef
 
 export def SearchFiles()
