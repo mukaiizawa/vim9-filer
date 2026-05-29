@@ -41,7 +41,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
 - `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Mark the item on the current line when nothing is marked; otherwise open a batch rename buffer for all marked items.
-- `x`: Open the directory on the current line in the OS file manager; otherwise open the current directory.
+- `x`: Open the item on the current line with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `s`: Cycle sort mode: `name` -> `size` -> `time`.

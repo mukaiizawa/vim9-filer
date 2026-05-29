@@ -687,6 +687,32 @@ def OpenWithSystemFileManager(path: string): bool
   return StartDetached(['xdg-open', target])
 enddef
 
+def OpenPathWithDefaultApplication(target: string): bool
+  var normalized = NormalizePath(target)
+  if empty(normalized)
+    return false
+  endif
+
+  if IsWindows()
+    return StartDetached([
+      'powershell',
+      '-NoProfile',
+      '-Command',
+      'Start-Process -LiteralPath $args[0]',
+      NativePath(normalized),
+    ])
+  endif
+
+  if IsMac()
+    return StartDetached(['open', normalized])
+  endif
+
+  if executable('xdg-open') != 1
+    return false
+  endif
+  return StartDetached(['xdg-open', normalized])
+enddef
+
 def JumpToPath(target_path: string)
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
@@ -792,7 +818,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
-  nnoremap <silent><buffer> x <Cmd>call filer#OpenInSystemFileManager()<CR>
+  nnoremap <silent><buffer> x <Cmd>call filer#OpenWithDefaultApplication()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
   nnoremap <silent><buffer><expr> <C-F> filer#HandleCtrlF()
   nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
@@ -1530,6 +1556,26 @@ export def OpenInSystemFileManager()
   endif
 
   echoerr $'Failed to open system file manager for: {path}'
+enddef
+
+export def OpenWithDefaultApplication()
+  var state = EnsureState()
+  var path = CurrentPathOrCwd(state)
+  if empty(path)
+    return
+  endif
+
+  if IsBrokenLink(path)
+    WarnBrokenLink(path)
+    return
+  endif
+
+  if OpenPathWithDefaultApplication(path)
+    Notify($'Opened with default application: {path}')
+    return
+  endif
+
+  echoerr $'Failed to open with default application: {path}'
 enddef
 
 export def MaybeOpenDir(path: string)
