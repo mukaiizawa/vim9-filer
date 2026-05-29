@@ -16,7 +16,7 @@ You can also pass a directory:
 :Filer path/to/dir
 ```
 
-Open the directory of the current buffer and jump to the current file with:
+Open the directory of the current buffer in a vertical split and jump to the current file with:
 
 ```vim
 :FilerBufferDir

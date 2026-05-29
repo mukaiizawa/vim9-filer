@@ -1130,6 +1130,7 @@ export def OpenBufferDir()
   if empty(dir)
     dir = getcwd()
   endif
+  vsplit
   Open(dir)
   if !empty(target)
     JumpToPath(target)
