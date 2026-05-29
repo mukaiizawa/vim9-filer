@@ -2,6 +2,8 @@ vim9script
 
 var state_by_bufnr: dict<any> = {}
 var rename_state_by_bufnr: dict<any> = {}
+var last_open_error = ''
+var active_jobs: list<job> = []
 
 const TREE_INDENTATION = 1
 const TREE_LEAF_ICON = '|'
@@ -14,6 +16,10 @@ const TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M'
 const SECONDS_PER_DAY = 24 * 60 * 60
 const TIMESTAMP_PLACEHOLDER = '-'
 const META_RESERVED_WIDTH = 5 + 1 + 16
+const ENTRY_PARENT = 'parent'
+const ENTRY_DIR = 'dir'
+const ENTRY_FILE = 'file'
+const EMPTY_LINE = '(empty)'
 
 def EscapeStatusline(text: string): string
   return substitute(text, '%', '%%', 'g')
@@ -29,6 +35,33 @@ enddef
 
 def Notify(message: string)
   echo message
+enddef
+
+def SetLastOpenError(message: string)
+  last_open_error = message
+enddef
+
+def ClearLastOpenError()
+  last_open_error = ''
+enddef
+
+def GetLastOpenError(): string
+  return last_open_error
+enddef
+
+def CleanupFinishedJobs()
+  var jobs: list<job> = []
+  for current_job in active_jobs
+    if job_status(current_job) ==# 'run'
+      add(jobs, current_job)
+    endif
+  endfor
+  active_jobs = jobs
+enddef
+
+def TrackJob(current_job: job)
+  CleanupFinishedJobs()
+  add(active_jobs, current_job)
 enddef
 
 def WarnBrokenLink(path: string)
@@ -239,6 +272,19 @@ def RelativePath(root: string, path: string): string
   return stridx(normalized_path, prefix) == 0 ? strpart(normalized_path, len(prefix)) : normalized_path
 enddef
 
+def MakeEntry(kind: string, name: string, path: string, depth: number): dict<any>
+  return {
+    kind: kind,
+    name: name,
+    path: path,
+    depth: depth,
+  }
+enddef
+
+def MakeFilesystemEntry(name: string, path: string, depth: number): dict<any>
+  return MakeEntry(IsDirectory(path) ? ENTRY_DIR : ENTRY_FILE, name, path, depth)
+enddef
+
 def EntryDepthPrefix(depth: number): string
   return repeat(' ', depth * TREE_INDENTATION)
 enddef
@@ -308,23 +354,11 @@ enddef
 def AddTreeEntries(entries: list<dict<any>>, dir: string, depth: number, state: dict<any>)
   for name in SortedChildren(dir, state.sort_mode)
     var path = JoinPath(dir, name)
-    if IsDirectory(path)
-      add(entries, {
-        kind: 'dir',
-        name: name,
-        path: path,
-        depth: depth,
-      })
-      if get(state.expanded_dirs, path, false)
-        AddTreeEntries(entries, path, depth + 1, state)
-      endif
-    else
-      add(entries, {
-        kind: 'file',
-        name: name,
-        path: path,
-        depth: depth,
-      })
+    var entry = MakeFilesystemEntry(name, path, depth)
+    add(entries, entry)
+
+    if entry.kind ==# ENTRY_DIR && get(state.expanded_dirs, path, false)
+      AddTreeEntries(entries, path, depth + 1, state)
     endif
   endfor
 enddef
@@ -358,12 +392,7 @@ def SearchTree(dir: string, root: string, state: dict<any>, entries: list<dict<a
   for name in SortedChildren(dir, state.sort_mode)
     var path = JoinPath(dir, name)
     if stridx(tolower(name), tolower(state.file_search_query)) >= 0
-      add(entries, {
-        kind: IsDirectory(path) ? 'dir' : 'file',
-        name: RelativePath(root, path),
-        path: path,
-        depth: 0,
-      })
+      add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
     endif
 
     if IsDirectory(path)
@@ -377,12 +406,7 @@ def BuildEntries(state: dict<any>): list<dict<any>>
   var parent = ParentDir(state.cwd)
 
   if parent !=# state.cwd
-    add(entries, {
-      kind: 'parent',
-      name: '..',
-      path: parent,
-      depth: 0,
-    })
+    add(entries, MakeEntry(ENTRY_PARENT, '..', parent, 0))
   endif
 
   if empty(state.file_search_query)
@@ -399,14 +423,14 @@ def IsMarked(state: dict<any>, path: string): bool
 enddef
 
 def DisplayName(state: dict<any>, entry: dict<any>): string
-  if entry.kind ==# 'parent'
+  if entry.kind ==# ENTRY_PARENT
     return '../'
   endif
 
   var mark = IsMarked(state, entry.path) ? MARKED_FILE_ICON : ' '
   var prefix = EntryDepthPrefix(entry.depth)
 
-  if entry.kind ==# 'dir'
+  if entry.kind ==# ENTRY_DIR
     var icon = get(state.expanded_dirs, entry.path, false) && empty(state.file_search_query)
       ? TREE_OPENED_ICON
       : TREE_CLOSED_ICON
@@ -440,7 +464,7 @@ def TruncateDisplayText(text: string, max_width: number): string
 enddef
 
 def EntryMtime(entry: dict<any>): number
-  if entry.kind ==# 'parent'
+  if entry.kind ==# ENTRY_PARENT
     return -1
   endif
 
@@ -506,15 +530,25 @@ def ClearTimestampMatches(state: dict<any>)
   state.timestamp_match_ids = []
 enddef
 
-def ApplyTimestampHighlights(state: dict<any>, specs: list<dict<any>>)
-  ClearTimestampMatches(state)
-  if !exists('*matchaddpos')
-    return
+def AddTimestampHighlight(spec: dict<any>): number
+  if !exists('*matchaddpos') || hlexists(spec.group) == 0
+    return -1
   endif
 
+  try
+    return matchaddpos(spec.group, [[spec.lnum, spec.col, spec.len]], 20)
+  catch
+    return -1
+  endtry
+enddef
+
+def ApplyTimestampHighlights(state: dict<any>, specs: list<dict<any>>)
+  ClearTimestampMatches(state)
   for spec in specs
-    var id = matchaddpos(spec.group, [[spec.lnum, spec.col, spec.len]], 20)
-    add(state.timestamp_match_ids, id)
+    var id = AddTimestampHighlight(spec)
+    if id > 0
+      add(state.timestamp_match_ids, id)
+    endif
   endfor
 enddef
 
@@ -544,7 +578,7 @@ def HumanFileSize(path: string): string
 enddef
 
 def EntrySize(entry: dict<any>): string
-  if entry.kind !=# 'file'
+  if entry.kind !=# ENTRY_FILE
     return '     '
   endif
 
@@ -553,7 +587,7 @@ enddef
 
 def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   var name = DisplayName(state, entry)
-  if entry.kind ==# 'parent'
+  if entry.kind ==# ENTRY_PARENT
     return TruncateDisplayText(name, width)
   endif
 
@@ -615,102 +649,58 @@ def NativePath(path: string): string
   return IsWindows() ? substitute(path, '/', '\\', 'g') : path
 enddef
 
-def StartDetached(cmd: list<string>): bool
+def StartJob(cmd: list<string>): bool
   if !exists('*job_start')
+    SetLastOpenError('job_start() is unavailable')
     return false
   endif
 
   try
-    var job = job_start(cmd, {detach: true})
-    return type(job) == v:t_job
+    var current_job = job_start(cmd)
+    if type(current_job) == v:t_job
+      TrackJob(current_job)
+      ClearLastOpenError()
+      return true
+    endif
+    SetLastOpenError($'job_start() did not return a job: {string(current_job)} for {string(cmd)}')
+    return false
   catch
+    SetLastOpenError($'{v:exception} for {string(cmd)}')
     return false
   endtry
 enddef
 
-def StartDetachedCommand(cmd: string): bool
-  if !exists('*job_start')
-    return false
-  endif
-
-  try
-    var job = job_start(cmd, {detach: true})
-    return type(job) == v:t_job
-  catch
-    return false
-  endtry
+def SingleQuoteForPowerShell(path: string): string
+  return "'" .. substitute(path, "'", "''", 'g') .. "'"
 enddef
 
-def RunCommand(cmd: string): bool
-  try
-    system(cmd)
-    return v:shell_error == 0
-  catch
-    return false
-  endtry
-enddef
-
-def DoubleQuoteForCmd(path: string): string
-  return '"' .. substitute(path, '"', '""', 'g') .. '"'
-enddef
-
-def OpenWithWindowsExplorer(path: string): bool
-  var native = NativePath(path)
-  var target = DoubleQuoteForCmd(native)
-  var explorer_arg = IsDirectory(path) ? target : '/select,' .. target
-  var cmd = 'cmd.exe /c start "" explorer.exe ' .. explorer_arg
-
-  return StartDetachedCommand(cmd) || RunCommand(cmd)
-enddef
-
-def OpenWithSystemFileManager(path: string): bool
-  var normalized = NormalizePath(path)
-  if empty(normalized)
-    return false
-  endif
-
+def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
-    return OpenWithWindowsExplorer(normalized)
+    var native = NativePath(normalized)
+    var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
+    return ['powershell', '-NoProfile', '-Command', ps]
   endif
 
   if IsMac()
-    if IsDirectory(normalized)
-      return StartDetached(['open', normalized])
-    endif
-    return StartDetached(['open', '-R', normalized])
+    return ['open', normalized]
   endif
 
-  var target = IsDirectory(normalized) ? normalized : ParentDir(normalized)
   if executable('xdg-open') != 1
-    return false
+    SetLastOpenError('xdg-open is unavailable')
+    return []
   endif
-  return StartDetached(['xdg-open', target])
+  return ['xdg-open', normalized]
 enddef
 
 def OpenPathWithDefaultApplication(target: string): bool
   var normalized = NormalizePath(target)
   if empty(normalized)
+    SetLastOpenError('empty target path')
     return false
   endif
 
-  if IsWindows()
-    return StartDetached([
-      'powershell',
-      '-NoProfile',
-      '-Command',
-      'Start-Process -FilePath $args[0]',
-      NativePath(normalized),
-    ])
-  endif
-
-  if IsMac()
-    return StartDetached(['open', normalized])
-  endif
-
-  if executable('xdg-open') != 1
-    return false
-  endif
-  return StartDetached(['xdg-open', normalized])
+  var cmd = OpenCommandForDefaultApplication(normalized)
+  return len(cmd) > 0 && StartJob(cmd)
 enddef
 
 def JumpToPath(target_path: string)
@@ -752,7 +742,7 @@ def Render()
     var line = FormatEntryLine(state, entry, width)
     add(lines, line)
 
-    if entry.kind ==# 'parent'
+    if entry.kind ==# ENTRY_PARENT
       continue
     endif
 
@@ -769,7 +759,7 @@ def Render()
     })
   endfor
   if len(state.entries) == 0
-    add(lines, TruncateDisplayText('(empty)', width))
+    add(lines, TruncateDisplayText(EMPTY_LINE, width))
   endif
 
   &l:modifiable = true
@@ -865,6 +855,16 @@ def ClearInvalidMarks(state: dict<any>)
   endfor
 enddef
 
+def MarkCurrentPath(state: dict<any>)
+  var path = CurrentPath(state)
+  if empty(path)
+    return
+  endif
+
+  state.marked_paths[path] = true
+  Render()
+enddef
+
 def EnsureParentDir(path: string)
   var parent = ParentDir(path)
   if !isdirectory(parent)
@@ -884,6 +884,16 @@ def MovePath(source: string, destination: string)
   if rename(source, destination) != 0
     throw $'Failed to move {source} to {destination}'
   endif
+enddef
+
+def EditFile(path: string): bool
+  if IsBrokenLink(path)
+    WarnBrokenLink(path)
+    return false
+  endif
+
+  execute 'edit ' .. fnameescape(path)
+  return true
 enddef
 
 def Prompt(prompt: string, default_value: string = ''): string
@@ -910,8 +920,7 @@ def BufferNameInUse(name: string, current_bufnr: number): bool
   return false
 enddef
 
-def MakeBufferName(dir: string, current_bufnr: number): string
-  var base = '[filer] ' .. dir
+def MakeUniqueBufferName(base: string, current_bufnr: number): string
   if !BufferNameInUse(base, current_bufnr)
     return base
   endif
@@ -925,19 +934,12 @@ def MakeBufferName(dir: string, current_bufnr: number): string
   return candidate
 enddef
 
-def MakeRenameBufferName(cwd: string, current_bufnr: number): string
-  var base = '[filer-rename] ' .. cwd
-  if !BufferNameInUse(base, current_bufnr)
-    return base
-  endif
+def MakeBufferName(dir: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer] ' .. dir, current_bufnr)
+enddef
 
-  var suffix = 2
-  var candidate = $'{base} ({suffix})'
-  while BufferNameInUse(candidate, current_bufnr)
-    suffix += 1
-    candidate = $'{base} ({suffix})'
-  endwhile
-  return candidate
+def MakeRenameBufferName(cwd: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer-rename] ' .. cwd, current_bufnr)
 enddef
 
 def MakeTemporaryMovePath(path: string): string
@@ -1151,16 +1153,12 @@ export def Enter()
     return
   endif
 
-  if entry.kind ==# 'file'
-    if IsBrokenLink(entry.path)
-      WarnBrokenLink(entry.path)
-      return
-    endif
-    execute 'edit ' .. fnameescape(entry.path)
+  if entry.kind ==# ENTRY_FILE
+    EditFile(entry.path)
     return
   endif
 
-  if entry.kind ==# 'parent'
+  if entry.kind ==# ENTRY_PARENT
     Open(entry.path)
     return
   endif
@@ -1176,7 +1174,7 @@ export def ToggleTree()
   endif
 
   var entry = CurrentEntry(state)
-  if empty(entry) || entry.kind !=# 'dir'
+  if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
 
@@ -1191,7 +1189,7 @@ export def ExpandTreeRecursive()
   endif
 
   var entry = CurrentEntry(state)
-  if empty(entry) || entry.kind !=# 'dir'
+  if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
 
@@ -1226,16 +1224,12 @@ export def GoChild()
     return
   endif
 
-  if entry.kind ==# 'file'
-    if IsBrokenLink(entry.path)
-      WarnBrokenLink(entry.path)
-      return
-    endif
-    execute 'edit ' .. fnameescape(entry.path)
+  if entry.kind ==# ENTRY_FILE
+    EditFile(entry.path)
     return
   endif
 
-  if entry.kind !=# 'dir'
+  if entry.kind !=# ENTRY_DIR
     return
   endif
 
@@ -1304,7 +1298,7 @@ export def MarkAll()
   var has_markable_entry = false
 
   for entry in state.entries
-    if entry.kind !=# 'parent'
+    if entry.kind !=# ENTRY_PARENT
       has_markable_entry = true
       if !IsMarked(state, entry.path)
         all_marked = false
@@ -1321,7 +1315,7 @@ export def MarkAll()
 
   state.marked_paths = {}
   for entry in state.entries
-    if entry.kind !=# 'parent'
+    if entry.kind !=# ENTRY_PARENT
       state.marked_paths[entry.path] = true
     endif
   endfor
@@ -1374,13 +1368,7 @@ export def DeleteOrMark()
     return
   endif
 
-  var path = CurrentPath(state)
-  if empty(path)
-    return
-  endif
-
-  state.marked_paths[path] = true
-  Render()
+  MarkCurrentPath(state)
 enddef
 
 export def DeleteMarked()
@@ -1413,13 +1401,7 @@ export def RenameOrMark()
     return
   endif
 
-  var path = CurrentPath(state)
-  if empty(path)
-    return
-  endif
-
-  state.marked_paths[path] = true
-  Render()
+  MarkCurrentPath(state)
 enddef
 
 export def ApplyRenameBuffer()
@@ -1540,25 +1522,6 @@ export def CycleSort()
   RefreshState(state, CurrentPath(state))
 enddef
 
-export def OpenInSystemFileManager()
-  var state = EnsureState()
-  var path = state.cwd
-  var entry = CurrentEntry(state)
-  if !empty(entry) && (entry.kind ==# 'dir' || entry.kind ==# 'parent')
-    path = entry.path
-  endif
-  if empty(path)
-    return
-  endif
-
-  if OpenWithSystemFileManager(path)
-    Notify($'Opened in system file manager: {path}')
-    return
-  endif
-
-  echoerr $'Failed to open system file manager for: {path}'
-enddef
-
 export def OpenWithDefaultApplication()
   var state = EnsureState()
   var path = CurrentPathOrCwd(state)
@@ -1576,7 +1539,10 @@ export def OpenWithDefaultApplication()
     return
   endif
 
-  echoerr $'Failed to open with default application: {path}'
+  var reason = GetLastOpenError()
+  echoerr empty(reason)
+    ? $'Failed to open with default application: {path}'
+    : $'Failed to open with default application: {path} ({reason})'
 enddef
 
 export def MaybeOpenDir(path: string)
