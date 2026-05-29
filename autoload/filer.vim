@@ -805,7 +805,7 @@ def SetupBuffer()
   nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
   nnoremap <silent><buffer> * <Cmd>call filer#MarkAll()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
-  nnoremap <silent><buffer> d <Cmd>call filer#DeleteOrMark()<CR>
+  nnoremap <silent><buffer><nowait> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> x <Cmd>call filer#OpenWithDefaultApplication()<CR>
