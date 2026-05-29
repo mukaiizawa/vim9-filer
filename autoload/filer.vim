@@ -698,7 +698,7 @@ def OpenPathWithDefaultApplication(target: string): bool
       'powershell',
       '-NoProfile',
       '-Command',
-      'Start-Process -LiteralPath $args[0]',
+      'Start-Process -FilePath $args[0]',
       NativePath(normalized),
     ])
   endif
