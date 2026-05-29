@@ -51,13 +51,14 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - The first line shows the current directory. Entries start on the second line.
 - A `../` entry is shown when the current directory has a parent.
 - Directory entries are shown before files for every sort mode.
-- Each entry shows name, file size, and modification time. Directories do not show a size.
+- Each entry shows name, file size, and modification time. When either value is unavailable, `-` is shown instead. Directories do not show a size.
+- When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - The statusline shows the current directory on the left, and the sort mode plus `[current/total]` position on the right.
-- When `:syntax on` is enabled, the `filer` syntax file is loaded and uses standard colorscheme highlight groups.
+- When `:syntax on` is enabled, the `filer` syntax file is loaded. Timestamps are color-coded by recency, from cool tones for newer entries to warm tones for older entries.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.
 - `x` on WSL is currently unsupported.

@@ -11,6 +11,9 @@ const FILE_ICON = ' '
 const MARKED_FILE_ICON = '*'
 const SORT_MODES = ['name', 'size', 'time']
 const TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M'
+const SECONDS_PER_DAY = 24 * 60 * 60
+const TIMESTAMP_PLACEHOLDER = '-'
+const META_RESERVED_WIDTH = 5 + 1 + 16
 
 def EscapeStatusline(text: string): string
   return substitute(text, '%', '%%', 'g')
@@ -248,6 +251,7 @@ def MakeState(dir: string): dict<any>
     marked_paths: {},
     file_search_query: '',
     sort_mode: 'name',
+    timestamp_match_ids: [],
   }
 enddef
 
@@ -435,19 +439,89 @@ def TruncateDisplayText(text: string, max_width: number): string
   return head .. '...'
 enddef
 
-def EntryTimestamp(entry: dict<any>): string
+def EntryMtime(entry: dict<any>): number
   if entry.kind ==# 'parent'
-    return ''
+    return -1
   endif
 
-  var mtime = getftime(entry.path)
-  return mtime < 0 ? '' : strftime(TIMESTAMP_FORMAT, mtime)
+  return getftime(entry.path)
+enddef
+
+def EntryTimestampFromMtime(mtime: number): string
+  return mtime < 0 ? TIMESTAMP_PLACEHOLDER : strftime(TIMESTAMP_FORMAT, mtime)
+enddef
+
+def EntryTimestamp(entry: dict<any>): string
+  return EntryTimestampFromMtime(EntryMtime(entry))
+enddef
+
+def TimestampHighlightGroup(mtime: number): string
+  if mtime < 0
+    return 'FilerTimestampUnknown'
+  endif
+
+  var age = max([0, localtime() - mtime])
+  if age <= SECONDS_PER_DAY
+    return 'FilerTimestampVeryFresh'
+  elseif age <= 3 * SECONDS_PER_DAY
+    return 'FilerTimestampFresh'
+  elseif age <= 7 * SECONDS_PER_DAY
+    return 'FilerTimestampRecent'
+  elseif age <= 30 * SECONDS_PER_DAY
+    return 'FilerTimestampNeutral'
+  elseif age <= 180 * SECONDS_PER_DAY
+    return 'FilerTimestampOld'
+  endif
+
+  return 'FilerTimestampVeryOld'
+enddef
+
+def TimestampColumn(line: string, timestamp: string): number
+  var start_char = strchars(line) - strchars(timestamp)
+  return byteidx(line, start_char) + 1
+enddef
+
+def HasVisibleTimestamp(line: string, timestamp: string): bool
+  var line_chars = strchars(line)
+  var timestamp_chars = strchars(timestamp)
+  if timestamp_chars > line_chars
+    return false
+  endif
+
+  return strcharpart(line, line_chars - timestamp_chars) ==# timestamp
+enddef
+
+def ClearTimestampMatches(state: dict<any>)
+  if !has_key(state, 'timestamp_match_ids')
+    state.timestamp_match_ids = []
+    return
+  endif
+
+  for id in state.timestamp_match_ids
+    try
+      matchdelete(id)
+    catch
+    endtry
+  endfor
+  state.timestamp_match_ids = []
+enddef
+
+def ApplyTimestampHighlights(state: dict<any>, specs: list<dict<any>>)
+  ClearTimestampMatches(state)
+  if !exists('*matchaddpos')
+    return
+  endif
+
+  for spec in specs
+    var id = matchaddpos(spec.group, [[spec.lnum, spec.col, spec.len]], 20)
+    add(state.timestamp_match_ids, id)
+  endfor
 enddef
 
 def HumanFileSize(path: string): string
   var size = getfsize(path)
   if size < 0
-    return '     '
+    return printf('%5s', TIMESTAMP_PLACEHOLDER)
   endif
 
   var units = ['B', 'K', 'M', 'G', 'T', 'P']
@@ -485,19 +559,15 @@ def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
 
   var size = EntrySize(entry)
   var timestamp = EntryTimestamp(entry)
-  var meta = empty(timestamp) ? size : size .. ' ' .. timestamp
-  if empty(meta)
+  var meta = size .. ' ' .. timestamp
+
+  if width <= META_RESERVED_WIDTH + 1
     return TruncateDisplayText(name, width)
   endif
 
-  var meta_width = strdisplaywidth(meta)
-  if width <= meta_width
-    return TruncateDisplayText(meta, width)
-  endif
-
-  var name_width = width - meta_width - 1
+  var name_width = width - META_RESERVED_WIDTH - 1
   var left = TruncateDisplayText(name, name_width)
-  return left .. repeat(' ', width - strdisplaywidth(left) - meta_width) .. meta
+  return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
 enddef
 
 def MarkCount(state: dict<any>): number
@@ -648,10 +718,29 @@ def Render()
   var state = state_by_bufnr[bufnr]
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
+  var timestamp_highlights: list<dict<any>> = []
 
   var lines = [TruncateDisplayText(state.cwd, width)]
-  for entry in state.entries
-    add(lines, FormatEntryLine(state, entry, width))
+  for index in range(len(state.entries))
+    var entry = state.entries[index]
+    var line = FormatEntryLine(state, entry, width)
+    add(lines, line)
+
+    if entry.kind ==# 'parent'
+      continue
+    endif
+
+    var timestamp = EntryTimestamp(entry)
+    if !HasVisibleTimestamp(line, timestamp)
+      continue
+    endif
+
+    add(timestamp_highlights, {
+      lnum: index + 2,
+      col: TimestampColumn(line, timestamp),
+      len: strlen(timestamp),
+      group: TimestampHighlightGroup(EntryMtime(entry)),
+    })
   endfor
   if len(state.entries) == 0
     add(lines, TruncateDisplayText('(empty)', width))
@@ -663,6 +752,7 @@ def Render()
     deletebufline(bufnr, len(lines) + 1, line('$'))
   endif
   &l:modifiable = false
+  ApplyTimestampHighlights(state, timestamp_highlights)
   UpdateStatusline(state)
 enddef
 
@@ -1169,6 +1259,7 @@ enddef
 export def CleanupStateForCurrentBuffer()
   var bufnr = bufnr('%')
   if has_key(state_by_bufnr, bufnr)
+    ClearTimestampMatches(state_by_bufnr[bufnr])
     remove(state_by_bufnr, bufnr)
   endif
 enddef
