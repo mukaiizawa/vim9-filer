@@ -39,6 +39,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `<Space>`: Toggle multi-selection.
 - `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
+- `c`: Mark the item on the current line when nothing is marked; otherwise open a batch copy buffer for all marked items.
 - `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Mark the item on the current line when nothing is marked; otherwise open a batch rename buffer for all marked items.
 - `x`: Open the item on the current line with the OS default associated application. On the first line, open the current directory.
@@ -55,8 +56,10 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
+- The `../` entry is never marked.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
+- Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
 - The statusline shows the current directory on the left, and the sort mode plus `[current/total]` position on the right.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded. Timestamps are color-coded by recency, from cool tones for newer entries to warm tones for older entries.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.

@@ -2,6 +2,7 @@ vim9script
 
 var state_by_bufnr: dict<any> = {}
 var rename_state_by_bufnr: dict<any> = {}
+var copy_state_by_bufnr: dict<any> = {}
 var last_open_error = ''
 var active_jobs: list<job> = []
 
@@ -213,6 +214,10 @@ enddef
 
 def IsDirectory(path: string): bool
   return isdirectory(path)
+enddef
+
+def IsParentEntry(entry: dict<any>): bool
+  return !empty(entry) && get(entry, 'kind', '') ==# ENTRY_PARENT
 enddef
 
 def Basename(path: string): string
@@ -805,6 +810,7 @@ def SetupBuffer()
   nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
   nnoremap <silent><buffer> * <Cmd>call filer#MarkAll()<CR>
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
+  nnoremap <silent><buffer> c <Cmd>call filer#CopyOrMark()<CR>
   nnoremap <silent><buffer><nowait> d <Cmd>call filer#DeleteOrMark()<CR>
   nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
@@ -856,12 +862,12 @@ def ClearInvalidMarks(state: dict<any>)
 enddef
 
 def MarkCurrentPath(state: dict<any>)
-  var path = CurrentPath(state)
-  if empty(path)
+  var entry = CurrentEntry(state)
+  if empty(entry) || IsParentEntry(entry)
     return
   endif
 
-  state.marked_paths[path] = true
+  state.marked_paths[entry.path] = true
   Render()
 enddef
 
@@ -942,6 +948,10 @@ def MakeRenameBufferName(cwd: string, current_bufnr: number): string
   return MakeUniqueBufferName('[filer-rename] ' .. cwd, current_bufnr)
 enddef
 
+def MakeCopyBufferName(cwd: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer-copy] ' .. cwd, current_bufnr)
+enddef
+
 def MakeTemporaryMovePath(path: string): string
   var candidate = path .. '.filer-tmp'
   var suffix = 2
@@ -982,6 +992,26 @@ def SetupRenameBuffer(context: dict<any>)
   nnoremap <silent><buffer> q <Cmd>bwipeout<CR>
 enddef
 
+def SetupCopyBuffer(context: dict<any>)
+  var current_bufnr = bufnr('%')
+  copy_state_by_bufnr[current_bufnr] = context
+
+  setlocal buftype=acwrite
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal nowrap
+  setlocal filetype=filer_copy
+  setlocal syntax=
+
+  augroup filer_copy_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyCopyBuffer()'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
+  augroup END
+
+  nnoremap <silent><buffer> q <Cmd>bwipeout<CR>
+enddef
+
 def OpenRenameBuffer(state: dict<any>, paths: list<string>)
   ValidateRenameSources(paths)
 
@@ -1003,6 +1033,25 @@ def OpenRenameBuffer(state: dict<any>, paths: list<string>)
   cursor(1, 1)
 enddef
 
+def OpenCopyBuffer(state: dict<any>, paths: list<string>)
+  var filer_bufnr = bufnr('%')
+  enew
+  var copy_bufnr = bufnr('%')
+  execute 'file ' .. fnameescape(MakeCopyBufferName(state.cwd, copy_bufnr))
+  SetupCopyBuffer({
+    filer_bufnr: filer_bufnr,
+    cwd: state.cwd,
+    source_paths: copy(paths),
+  })
+
+  setline(1, paths)
+  if line('$') > len(paths)
+    deletebufline(copy_bufnr, len(paths) + 1, line('$'))
+  endif
+  setlocal nomodified
+  cursor(1, 1)
+enddef
+
 def CollectRenameDestinations(context: dict<any>): list<string>
   var source_paths = context.source_paths
   var lines = getline(1, '$')
@@ -1018,6 +1067,79 @@ def CollectRenameDestinations(context: dict<any>): list<string>
     add(destinations, ResolvePath(context.cwd, line_text))
   endfor
   return destinations
+enddef
+
+def CollectCopyDestinations(context: dict<any>): list<string>
+  var source_paths = context.source_paths
+  var lines = getline(1, '$')
+  if len(lines) != len(source_paths)
+    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
+  endif
+
+  var destinations: list<string> = []
+  for line_text in lines
+    if empty(line_text)
+      throw 'Copy destination cannot be empty'
+    endif
+    add(destinations, ResolvePath(context.cwd, line_text))
+  endfor
+  return destinations
+enddef
+
+def CopyFile(source: string, destination: string)
+  writefile(readfile(source, 'b'), destination, 'b')
+enddef
+
+def CopyDirectory(source: string, destination: string)
+  mkdir(destination, 'p')
+  for name in SafeReadDir(source)
+    var child_source = JoinPath(source, name)
+    var child_destination = JoinPath(destination, name)
+    CopyPath(child_source, child_destination)
+  endfor
+enddef
+
+def CopyPath(source: string, destination: string)
+  if PathExists(destination)
+    DeletePath(destination)
+  endif
+
+  EnsureParentDir(destination)
+  if IsDirectory(source)
+    CopyDirectory(source, destination)
+    return
+  endif
+
+  CopyFile(source, destination)
+enddef
+
+def ApplyBulkCopy(source_paths: list<string>, destination_paths: list<string>): list<string>
+  var copied_paths: list<string> = []
+
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    if PathKey(source) ==# PathKey(destination) && source ==# destination
+      continue
+    endif
+
+    if !PathExists(source)
+      throw $'Source does not exist: {source}'
+    endif
+
+    if IsSameOrChildPath(destination, source)
+      throw $'Copy destination overlaps source and would remove it: {destination}'
+    endif
+
+    if IsDirectory(source) && IsSameOrChildPath(source, destination)
+      throw $'Cannot copy a directory into itself: {source} -> {destination}'
+    endif
+
+    CopyPath(source, destination)
+    add(copied_paths, destination)
+  endfor
+
+  return copied_paths
 enddef
 
 def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>): list<string>
@@ -1244,7 +1366,12 @@ enddef
 
 export def ToggleMark()
   var state = EnsureState()
-  var path = CurrentPath(state)
+  var entry = CurrentEntry(state)
+  if empty(entry) || IsParentEntry(entry)
+    return
+  endif
+
+  var path = entry.path
   var current_index = CurrentEntryIndex(state)
   if empty(path)
     return
@@ -1289,6 +1416,13 @@ export def CleanupRenameBufferForCurrentBuffer()
   var bufnr = bufnr('%')
   if has_key(rename_state_by_bufnr, bufnr)
     remove(rename_state_by_bufnr, bufnr)
+  endif
+enddef
+
+export def CleanupCopyBufferForCurrentBuffer()
+  var bufnr = bufnr('%')
+  if has_key(copy_state_by_bufnr, bufnr)
+    remove(copy_state_by_bufnr, bufnr)
   endif
 enddef
 
@@ -1404,6 +1538,17 @@ export def RenameOrMark()
   MarkCurrentPath(state)
 enddef
 
+export def CopyOrMark()
+  var state = EnsureState()
+  var paths = sort(keys(state.marked_paths))
+  if len(paths) > 0
+    OpenCopyBuffer(state, paths)
+    return
+  endif
+
+  MarkCurrentPath(state)
+enddef
+
 export def ApplyRenameBuffer()
   var rename_bufnr = bufnr('%')
   if !has_key(rename_state_by_bufnr, rename_bufnr)
@@ -1426,6 +1571,30 @@ export def ApplyRenameBuffer()
   state.marked_paths = {}
   RefreshState(state, len(renamed_paths) > 0 ? renamed_paths[0] : state.cwd)
   execute 'bwipeout ' .. rename_bufnr
+enddef
+
+export def ApplyCopyBuffer()
+  var copy_bufnr = bufnr('%')
+  if !has_key(copy_state_by_bufnr, copy_bufnr)
+    return
+  endif
+
+  var context = copy_state_by_bufnr[copy_bufnr]
+  var destination_paths = CollectCopyDestinations(context)
+  var copied_paths = ApplyBulkCopy(context.source_paths, destination_paths)
+  setlocal nomodified
+
+  var filer_bufnr = context.filer_bufnr
+  if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
+    Notify($'Copied {len(copied_paths)} entries')
+    return
+  endif
+
+  execute 'buffer ' .. filer_bufnr
+  var state = state_by_bufnr[filer_bufnr]
+  state.marked_paths = {}
+  RefreshState(state, len(copied_paths) > 0 ? copied_paths[0] : state.cwd)
+  execute 'bwipeout ' .. copy_bufnr
 enddef
 
 export def RenameCurrent()
