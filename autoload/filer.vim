@@ -17,6 +17,15 @@ const TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M'
 const SECONDS_PER_DAY = 24 * 60 * 60
 const TIMESTAMP_PLACEHOLDER = '-'
 const META_RESERVED_WIDTH = 5 + 1 + 16
+const TIMESTAMP_HIGHLIGHT_GROUPS = [
+  'FilerTimestampVeryFresh',
+  'FilerTimestampFresh',
+  'FilerTimestampRecent',
+  'FilerTimestampNeutral',
+  'FilerTimestampOld',
+  'FilerTimestampVeryOld',
+  'FilerTimestampUnknown',
+]
 const ENTRY_PARENT = 'parent'
 const ENTRY_DIR = 'dir'
 const ENTRY_FILE = 'file'
@@ -302,7 +311,6 @@ def MakeState(dir: string): dict<any>
     marked_paths: {},
     file_search_query: '',
     sort_mode: 'name',
-    timestamp_match_ids: [],
   }
 enddef
 
@@ -520,40 +528,54 @@ def HasVisibleTimestamp(line: string, timestamp: string): bool
   return strcharpart(line, line_chars - timestamp_chars) ==# timestamp
 enddef
 
-def ClearTimestampMatches(state: dict<any>)
-  if !has_key(state, 'timestamp_match_ids')
-    state.timestamp_match_ids = []
+def ClearTimestampProps(bufnr: number, last_lnum: number)
+  if !exists('*prop_clear') || last_lnum < 1
     return
   endif
 
-  for id in state.timestamp_match_ids
-    try
-      matchdelete(id)
-    catch
-    endtry
-  endfor
-  state.timestamp_match_ids = []
-enddef
-
-def AddTimestampHighlight(spec: dict<any>): number
-  if !exists('*matchaddpos') || hlexists(spec.group) == 0
-    return -1
-  endif
-
   try
-    return matchaddpos(spec.group, [[spec.lnum, spec.col, spec.len]], 20)
+    prop_clear(1, last_lnum, {bufnr: bufnr, all: true})
   catch
-    return -1
   endtry
 enddef
 
-def ApplyTimestampHighlights(state: dict<any>, specs: list<dict<any>>)
-  ClearTimestampMatches(state)
-  for spec in specs
-    var id = AddTimestampHighlight(spec)
-    if id > 0
-      add(state.timestamp_match_ids, id)
+def EnsureTimestampPropTypes(bufnr: number)
+  if !exists('*prop_type_add')
+    return
+  endif
+
+  for group in TIMESTAMP_HIGHLIGHT_GROUPS
+    if hlexists(group) == 0
+      continue
     endif
+
+    try
+      prop_type_add(group, {bufnr: bufnr, highlight: group})
+    catch
+    endtry
+  endfor
+enddef
+
+def AddTimestampHighlight(bufnr: number, spec: dict<any>)
+  if !exists('*prop_add') || hlexists(spec.group) == 0
+    return
+  endif
+
+  try
+    prop_add(spec.lnum, spec.col, {
+      bufnr: bufnr,
+      length: spec.len,
+      type: spec.group,
+    })
+  catch
+  endtry
+enddef
+
+def ApplyTimestampHighlights(bufnr: number, specs: list<dict<any>>, last_lnum: number)
+  ClearTimestampProps(bufnr, last_lnum)
+  EnsureTimestampPropTypes(bufnr)
+  for spec in specs
+    AddTimestampHighlight(bufnr, spec)
   endfor
 enddef
 
@@ -737,6 +759,7 @@ def Render()
   endif
 
   var state = state_by_bufnr[bufnr]
+  var previous_last_lnum = line('$')
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
   var timestamp_highlights: list<dict<any>> = []
@@ -773,7 +796,7 @@ def Render()
     deletebufline(bufnr, len(lines) + 1, line('$'))
   endif
   &l:modifiable = false
-  ApplyTimestampHighlights(state, timestamp_highlights)
+  ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
   UpdateStatusline(state)
 enddef
 
@@ -1407,7 +1430,7 @@ enddef
 export def CleanupStateForCurrentBuffer()
   var bufnr = bufnr('%')
   if has_key(state_by_bufnr, bufnr)
-    ClearTimestampMatches(state_by_bufnr[bufnr])
+    ClearTimestampProps(bufnr, line('$'))
     remove(state_by_bufnr, bufnr)
   endif
 enddef
