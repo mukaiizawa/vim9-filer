@@ -49,14 +49,12 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 
 ## Notes
 
-- The first line shows the current directory. Entries start on the second line.
-- A `../` entry is shown when the current directory has a parent.
+- The first line shows the current directory with a trailing `/`. Entries start on the second line when present.
 - Directory entries are shown before files for every sort mode.
 - Each entry shows name, file size, and modification time. When either value is unavailable, `-` is shown instead. Directories do not show a size.
 - When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with `*`.
-- The `../` entry is never marked.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.

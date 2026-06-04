@@ -26,10 +26,10 @@ const TIMESTAMP_HIGHLIGHT_GROUPS = [
   'FilerTimestampVeryOld',
   'FilerTimestampUnknown',
 ]
-const ENTRY_PARENT = 'parent'
 const ENTRY_DIR = 'dir'
 const ENTRY_FILE = 'file'
-const EMPTY_LINE = '(empty)'
+const HEADER_LINE = 1
+const FIRST_ENTRY_LINE = HEADER_LINE + 1
 
 def EscapeStatusline(text: string): string
   return substitute(text, '%', '%%', 'g')
@@ -41,6 +41,10 @@ def DisplayDir(path: string): string
   endif
 
   return path .. '/'
+enddef
+
+def EntryLine(entry_index: number): number
+  return entry_index + FIRST_ENTRY_LINE
 enddef
 
 def Notify(message: string)
@@ -223,10 +227,6 @@ enddef
 
 def IsDirectory(path: string): bool
   return isdirectory(path)
-enddef
-
-def IsParentEntry(entry: dict<any>): bool
-  return !empty(entry) && get(entry, 'kind', '') ==# ENTRY_PARENT
 enddef
 
 def Basename(path: string): string
@@ -416,11 +416,6 @@ enddef
 
 def BuildEntries(state: dict<any>): list<dict<any>>
   var entries: list<dict<any>> = []
-  var parent = ParentDir(state.cwd)
-
-  if parent !=# state.cwd
-    add(entries, MakeEntry(ENTRY_PARENT, '..', parent, 0))
-  endif
 
   if empty(state.file_search_query)
     AddTreeEntries(entries, state.cwd, 0, state)
@@ -436,10 +431,6 @@ def IsMarked(state: dict<any>, path: string): bool
 enddef
 
 def DisplayName(state: dict<any>, entry: dict<any>): string
-  if entry.kind ==# ENTRY_PARENT
-    return '../'
-  endif
-
   var mark = IsMarked(state, entry.path) ? MARKED_FILE_ICON : ' '
   var prefix = EntryDepthPrefix(entry.depth)
 
@@ -477,10 +468,6 @@ def TruncateDisplayText(text: string, max_width: number): string
 enddef
 
 def EntryMtime(entry: dict<any>): number
-  if entry.kind ==# ENTRY_PARENT
-    return -1
-  endif
-
   return getftime(entry.path)
 enddef
 
@@ -614,9 +601,6 @@ enddef
 
 def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   var name = DisplayName(state, entry)
-  if entry.kind ==# ENTRY_PARENT
-    return TruncateDisplayText(name, width)
-  endif
 
   var size = EntrySize(entry)
   var timestamp = EntryTimestamp(entry)
@@ -641,7 +625,7 @@ def CurrentEntryPosition(state: dict<any>): number
     return 0
   endif
 
-  return min([max([line('.') - 1, 1]), total])
+  return min([max([line('.') - HEADER_LINE, 1]), total])
 enddef
 
 def UpdateStatusline(state: dict<any>)
@@ -652,7 +636,7 @@ def UpdateStatusline(state: dict<any>)
 enddef
 
 def CurrentEntryIndex(state: dict<any>): number
-  return line('.') - 2
+  return line('.') - FIRST_ENTRY_LINE
 enddef
 
 def CurrentEntry(state: dict<any>): dict<any>
@@ -669,7 +653,7 @@ def CurrentPath(state: dict<any>): string
 enddef
 
 def CurrentPathOrCwd(state: dict<any>): string
-  return line('.') == 1 ? state.cwd : CurrentPath(state)
+  return line('.') == HEADER_LINE ? state.cwd : CurrentPath(state)
 enddef
 
 def NativePath(path: string): string
@@ -740,16 +724,20 @@ def JumpToPath(target_path: string)
   var state = state_by_bufnr[bufnr]
   for index in range(len(state.entries))
     if state.entries[index].path ==# target
-      cursor(index + 2, 1)
+      cursor(EntryLine(index), 1)
       return
     endif
   endfor
 
-  cursor(2, 1)
+  JumpToFirstEntry()
+enddef
+
+export def JumpToFirstEntry()
+  cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
 enddef
 
 export def JumpToTop()
-  cursor(min([3, line('$')]), 1)
+  JumpToFirstEntry()
 enddef
 
 def Render()
@@ -764,15 +752,11 @@ def Render()
   var width = max([1, winwidth(0)])
   var timestamp_highlights: list<dict<any>> = []
 
-  var lines = [TruncateDisplayText(state.cwd, width)]
+  var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
   for index in range(len(state.entries))
     var entry = state.entries[index]
     var line = FormatEntryLine(state, entry, width)
     add(lines, line)
-
-    if entry.kind ==# ENTRY_PARENT
-      continue
-    endif
 
     var timestamp = EntryTimestamp(entry)
     if !HasVisibleTimestamp(line, timestamp)
@@ -780,16 +764,12 @@ def Render()
     endif
 
     add(timestamp_highlights, {
-      lnum: index + 2,
+      lnum: EntryLine(index),
       col: TimestampColumn(line, timestamp),
       len: strlen(timestamp),
       group: TimestampHighlightGroup(EntryMtime(entry)),
     })
   endfor
-  if len(state.entries) == 0
-    add(lines, TruncateDisplayText(EMPTY_LINE, width))
-  endif
-
   &l:modifiable = true
   setbufline(bufnr, 1, lines)
   if line('$') > len(lines)
@@ -835,7 +815,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
   nnoremap <silent><buffer> c <Cmd>call filer#CopyOrMark()<CR>
   nnoremap <silent><buffer><nowait> d <Cmd>call filer#DeleteOrMark()<CR>
-  nnoremap <silent><buffer> gg <Cmd>call filer#JumpToTop()<CR>
+  nnoremap <silent><buffer> gg <Cmd>call filer#JumpToFirstEntry()<CR>
   nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> x <Cmd>call filer#OpenWithDefaultApplication()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
@@ -886,7 +866,7 @@ enddef
 
 def MarkCurrentPath(state: dict<any>)
   var entry = CurrentEntry(state)
-  if empty(entry) || IsParentEntry(entry)
+  if empty(entry)
     return
   endif
 
@@ -1252,7 +1232,7 @@ def OpenOrReuse(dir: string, reset_tree: bool = true)
   SetCwd(prev, dir, reset_tree)
   ClearInvalidMarks(prev)
   Render()
-  cursor(2, 1)
+  JumpToFirstEntry()
 enddef
 
 export def Open(dir_arg: string = '', reset_tree: bool = true)
@@ -1303,13 +1283,8 @@ export def Enter()
     return
   endif
 
-  if entry.kind ==# ENTRY_PARENT
-    Open(entry.path)
-    return
-  endif
-
   Open(entry.path)
-  JumpToTop()
+  JumpToFirstEntry()
 enddef
 
 export def ToggleTree()
@@ -1390,7 +1365,7 @@ enddef
 export def ToggleMark()
   var state = EnsureState()
   var entry = CurrentEntry(state)
-  if empty(entry) || IsParentEntry(entry)
+  if empty(entry)
     return
   endif
 
@@ -1406,10 +1381,9 @@ export def ToggleMark()
     state.marked_paths[path] = true
   endif
   RefreshState(state, path)
-  var target_line = current_index + 3 > line('$') ? 3 : current_index + 3
-  if target_line >= 3
-    cursor(target_line, 1)
-  endif
+  var next_line = EntryLine(current_index + 1)
+  var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
+  cursor(target_line, 1)
 enddef
 
 export def ClearMarks()
@@ -1455,12 +1429,10 @@ export def MarkAll()
   var has_markable_entry = false
 
   for entry in state.entries
-    if entry.kind !=# ENTRY_PARENT
-      has_markable_entry = true
-      if !IsMarked(state, entry.path)
-        all_marked = false
-        break
-      endif
+    has_markable_entry = true
+    if !IsMarked(state, entry.path)
+      all_marked = false
+      break
     endif
   endfor
 
@@ -1472,9 +1444,7 @@ export def MarkAll()
 
   state.marked_paths = {}
   for entry in state.entries
-    if entry.kind !=# ENTRY_PARENT
-      state.marked_paths[entry.path] = true
-    endif
+    state.marked_paths[entry.path] = true
   endfor
   RefreshState(state, CurrentPath(state))
 enddef
