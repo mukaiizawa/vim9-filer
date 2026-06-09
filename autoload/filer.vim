@@ -314,10 +314,14 @@ def MakeState(dir: string): dict<any>
   }
 enddef
 
+def MissingStateError(bufnr: number): string
+  return $'filer state is missing for buffer {bufnr} ({bufname(bufnr)}); filetype={&filetype}; cwd={getcwd()}; close and reopen the filer buffer'
+enddef
+
 def EnsureState(): dict<any>
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
-    state_by_bufnr[bufnr] = MakeState(getcwd())
+    throw MissingStateError(bufnr)
   endif
   return state_by_bufnr[bufnr]
 enddef
