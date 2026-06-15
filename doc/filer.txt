@@ -1,0 +1,232 @@
+*filer.txt*	Minimal file explorer implemented in Vim9 script
+
+Author: Shintaro Mukai <shintaro@mukai.systems>
+Repository: https://github.com/mukaiizawa/vim9-filer
+License: MIT License
+
+==============================================================================
+CONTENTS						*filer-contents*
+
+Introduction	|filer-introduction|
+Commands	|filer-commands|
+Mappings	|filer-mappings|
+View		|filer-view|
+Marks		|filer-marks|
+Batch buffers	|filer-batch-buffers|
+Search		|filer-search|
+Sorting		|filer-sorting|
+Syntax		|filer-syntax|
+Limitations	|filer-limitations|
+
+==============================================================================
+INTRODUCTION						*filer-introduction*
+
+filer is a small file explorer implemented in Vim9 script.
+
+It disables netrw by setting |g:loaded_netrwPlugin| and opens a filer buffer
+automatically when Vim enters a directory buffer.  A filer buffer uses the
+|filer| filetype and shows a tree rooted at the current filer directory.
+
+==============================================================================
+COMMANDS						*filer-commands*
+
+							*:Filer*
+:Filer [dir]
+		Open a filer buffer for [dir].
+
+		When [dir] is omitted, the current working directory is used.  The
+		argument is completed as a directory.
+
+>
+	:Filer
+	:Filer path/to/dir
+<
+
+							*:FilerBufferDir*
+:FilerBufferDir
+		Open the directory of the current buffer in a vertical split and
+		jump to the current file.
+
+		When the current buffer is already a filer buffer, reopen the same
+		filer directory without resetting expanded directories.
+
+==============================================================================
+MAPPINGS						*filer-mappings*
+
+The following mappings are buffer-local to filer buffers.
+
+							*filer-q*
+q		Close the filer window.
+
+							*filer-enter*
+<CR>		Open the item under the cursor.  Files are edited.  Directories
+		are opened as the new filer root.
+
+							*filer-tab*
+<Tab>		Duplicate the current filer buffer in a vertical split.
+
+							*filer-t*
+t		Toggle expansion for the directory under the cursor.
+
+							*filer-T*
+T		Recursively toggle expansion for the directory under the cursor.
+
+							*filer-home*
+~		Redraw with the home directory as the root.
+
+							*filer-root*
+\		Redraw with the filesystem root as the root.
+
+							*filer-h*
+h		Redraw with the parent directory as the root.
+
+							*filer-l*
+l		Open the item under the cursor.  Files are edited.  Directories
+		are opened as the new filer root.
+
+							*filer-dot*
+.		Re-open the current filer directory and redraw the view.
+
+							*filer-space*
+<Space>		Toggle the mark on the item under the cursor.
+
+							*filer-star*
+*		Toggle marking of all items in the current view.
+
+							*filer-a*
+a		Create a file or directory.  A trailing "/" or "\" creates a
+		directory.
+
+							*filer-c*
+c		When no items are marked, mark the item under the cursor.  When
+		items are marked, open a batch copy buffer for the marked items.
+
+							*filer-d*
+d		When no items are marked, mark the item under the cursor.  When
+		items are marked, confirm and delete all marked items.
+
+							*filer-gg*
+gg		Jump to the first entry.
+
+							*filer-r*
+r		When no items are marked, mark the item under the cursor.  When
+		items are marked, open a batch rename buffer for the marked items.
+
+							*filer-x*
+x		Open the item under the cursor with the OS default application.
+		On the header line, open the current filer directory.
+
+							*filer-yy*
+yy		Copy the full path of the current line to the clipboard register.
+		On the header line, copy the current filer directory.
+
+							*filer-CTRL-F*
+CTRL-F		Recursively search for file names under the current filer
+		directory.  Submit an empty query to clear the search.
+
+		While a search is active, CTRL-F keeps its normal page-down
+		behavior.
+
+							*filer-S*
+S		Cycle the sort mode: "name" -> "size" -> "time".
+
+==============================================================================
+VIEW							*filer-view*
+
+The first line shows the current filer directory with a trailing slash.  Entries
+start on the second line when present.
+
+Directory entries are shown before files for every sort mode.  Each entry shows
+the name, file size, and modification time.  Directories do not show a size.
+When a size or timestamp is unavailable, "-" is shown instead.
+
+When the window is too narrow to fit the metadata area, each entry falls back to
+showing only the name.
+
+Symbolic links are shown as directories when their targets are directories.
+Broken symbolic links are reported when filer tries to open them.
+
+The statusline shows the current directory on the left, and the current sort
+mode plus "[current/total]" entry position on the right.
+
+==============================================================================
+MARKS							*filer-marks*
+
+Selected items are marked with "*".  Marks are local to a filer buffer.
+
+Marks are cleared when changing directories, when the filer buffer is hidden,
+and when the filer buffer is closed.
+
+The delete, rename, and copy mappings use marks as their selection.  If no item
+is marked, these mappings first mark the item under the cursor.
+
+==============================================================================
+BATCH BUFFERS						*filer-batch-buffers*
+
+							*filer-batch-rename*
+Batch rename opens a temporary buffer listing the marked paths.  Edit each line
+to the destination path and write the buffer with |:write| to apply the rename.
+
+The number of lines must match the number of source paths, and destination lines
+cannot be empty.  Relative destinations are resolved from the filer directory.
+
+							*filer-batch-copy*
+Batch copy opens a temporary buffer listing the marked paths.  Edit each line to
+the destination path and write the buffer with |:write| to copy the changed
+entries.  Unchanged source and destination pairs are skipped.
+
+The number of lines must match the number of source paths, and destination lines
+cannot be empty.  Relative destinations are resolved from the filer directory.
+
+Use "q" in a batch buffer to wipe it out without applying changes.
+
+==============================================================================
+SEARCH							*filer-search*
+
+Search mode is enabled with |filer-CTRL-F|.  It recursively scans file names
+under the current filer directory and displays matching entries as paths
+relative to that directory.
+
+Directory expansion mappings do nothing while a search is active.  Submit an
+empty search query to return to the tree view.
+
+==============================================================================
+SORTING							*filer-sorting*
+
+The default sort mode is "name".  Use |filer-S| to cycle through:
+
+	name	Sort by name.
+	size	Sort files by size, largest first.
+	time	Sort by modification time, newest first.
+
+Directories are listed before files in every sort mode.  Name order is used as
+the final tie breaker.
+
+==============================================================================
+SYNTAX							*filer-syntax*
+
+When |:syntax-on| is enabled, filer loads the "filer" syntax file.
+
+The syntax file highlights the header, marks, tree icons, directories, files,
+sizes, and timestamps.  Timestamps are color-coded by recency from newer to
+older entries.
+
+==============================================================================
+LIMITATIONS						*filer-limitations*
+
+Basic operation on Windows is supported within the same drive.  Renaming across
+drives on Windows is not supported.
+
+Opening files with the OS default application uses:
+
+	Windows		powershell Start-Process
+	macOS		open
+	Other Unix	xdg-open
+
+"x" on WSL is currently unsupported.
+
+Home directory resolution on Windows prefers |expand()| for "~", then falls
+back to $HOME, $USERPROFILE, or $HOMEDRIVE plus $HOMEPATH.
+
+==============================================================================
+ vim:tw=78:ts=8:noet:ft=help:
