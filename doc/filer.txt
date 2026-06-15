@@ -24,9 +24,12 @@ INTRODUCTION						*filer-introduction*
 
 filer is a small file explorer implemented in Vim9 script.
 
-It disables netrw by setting |g:loaded_netrwPlugin| and opens a filer buffer
-automatically when Vim enters a directory buffer.  A filer buffer uses the
-|filer| filetype and shows a tree rooted at the current filer directory.
+filer intentionally disables netrw by setting |g:loaded_netrwPlugin|.  It
+replaces Vim's default directory buffer handling and opens a filer buffer
+automatically when Vim enters a directory buffer.
+
+A filer buffer uses the |filer| filetype and shows a tree rooted at the current
+filer directory.
 
 ==============================================================================
 COMMANDS						*filer-commands*

@@ -2,6 +2,9 @@
 
 A minimal file explorer implemented in Vim9 script.
 
+This plugin intentionally disables netrw by setting `g:loaded_netrwPlugin`.
+It replaces Vim's default directory buffer handling with `filer`.
+
 ## Usage
 
 Open the explorer with:
@@ -31,7 +34,8 @@ Open the directory of the current buffer and jump to the current file with:
 :FilerBufferDir split
 ```
 
-This plugin disables netrw and replaces Vim's default directory buffer behavior by opening `filer` automatically when entering a directory.
+When Vim enters a directory buffer, `filer` opens automatically instead of
+netrw.
 
 ## Key Bindings
 
