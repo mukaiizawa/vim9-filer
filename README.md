@@ -36,6 +36,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `.`: Re-open the current directory and redraw the view.
 - `gg`: Jump to the first entry.
 - `q`: Close the explorer.
+- `<Tab>`: Duplicate the current filer buffer in a vertical split.
 - `<Space>`: Toggle multi-selection.
 - `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.

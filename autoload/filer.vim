@@ -807,6 +807,7 @@ def SetupBuffer()
 
   nnoremap <silent><buffer> q <Cmd>close<CR>
   nnoremap <silent><buffer> <CR> <Cmd>call filer#Enter()<CR>
+  nnoremap <silent><buffer> <Tab> <Cmd>call filer#DuplicateBuffer()<CR>
   nnoremap <silent><buffer> t <Cmd>call filer#ToggleTree()<CR>
   nnoremap <silent><buffer> T <Cmd>call filer#ExpandTreeRecursive()<CR>
   nnoremap <silent><buffer> ~ <Cmd>call filer#GoHome()<CR>
@@ -1221,12 +1222,8 @@ def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>)
   return renamed_paths
 enddef
 
-def OpenOrReuse(dir: string, reset_tree: bool = true)
+def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
   var current_bufnr = bufnr('%')
-  if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
-    enew
-  endif
-  current_bufnr = bufnr('%')
   execute 'file ' .. fnameescape(MakeBufferName(dir, current_bufnr))
   SetupBuffer()
 
@@ -1237,6 +1234,21 @@ def OpenOrReuse(dir: string, reset_tree: bool = true)
   ClearInvalidMarks(prev)
   Render()
   JumpToFirstEntry()
+enddef
+
+def OpenOrReuse(dir: string, reset_tree: bool = true)
+  var current_bufnr = bufnr('%')
+  if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
+    enew
+  endif
+
+  OpenInCurrentBuffer(dir, reset_tree)
+enddef
+
+def OpenInSplit(dir: string, reset_tree: bool = true)
+  vsplit
+  enew
+  OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
 export def Open(dir_arg: string = '', reset_tree: bool = true)
@@ -1261,11 +1273,15 @@ export def OpenBufferDir()
   if empty(dir)
     dir = getcwd()
   endif
-  vsplit
-  Open(dir)
+  OpenInSplit(dir)
   if !empty(target)
     JumpToPath(target)
   endif
+enddef
+
+export def DuplicateBuffer()
+  var state = EnsureState()
+  OpenInSplit(state.cwd, false)
 enddef
 
 export def Refresh()
