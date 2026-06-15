@@ -824,7 +824,7 @@ def SetupBuffer()
   nnoremap <silent><buffer> x <Cmd>call filer#OpenWithDefaultApplication()<CR>
   nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
   nnoremap <silent><buffer><expr> <C-F> filer#HandleCtrlF()
-  nnoremap <silent><buffer> s <Cmd>call filer#CycleSort()<CR>
+  nnoremap <silent><buffer><nowait> S <Cmd>call filer#CycleSort()<CR>
 enddef
 
 def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)

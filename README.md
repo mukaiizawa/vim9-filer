@@ -45,7 +45,7 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `x`: Open the item on the current line with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
-- `s`: Cycle sort mode: `name` -> `size` -> `time`.
+- `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Notes
 
