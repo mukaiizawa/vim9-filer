@@ -48,6 +48,63 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
+## Key Mapping Customization
+
+Default mappings can be disabled:
+
+```vim
+g:filer_no_default_mappings = true
+
+autocmd FileType filer nmap <buffer> o <Plug>(filer-enter)
+autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
+autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
+autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
+```
+
+Custom buffer-local mappings can also be defined directly with `<Plug>`
+mappings:
+
+```vim
+autocmd FileType filer nmap <buffer> <C-B> <Plug>(filer-search)
+```
+
+Individual default mappings can also be changed with `g:filer_mappings`:
+
+```vim
+g:filer_mappings = {
+      'enter': 'o',
+      'parent': 'H',
+      'child': 'L',
+      'search': '/',
+      }
+```
+
+Use an empty string to disable one action, or a list to assign multiple keys:
+
+```vim
+g:filer_mappings = {
+      'open_external': '',
+      'enter': ['<CR>', 'o'],
+      }
+```
+
+When `g:filer_no_default_mappings` is enabled, only explicitly configured
+actions in `g:filer_mappings` are mapped.
+
+Batch rename and copy buffers use `g:filer_batch_mappings`:
+
+```vim
+g:filer_batch_mappings = {
+      'close': 'q',
+      }
+```
+
+Available `g:filer_mappings` actions are `close`, `enter`, `duplicate`,
+`toggle_tree`, `toggle_tree_recursive`, `home`, `root`, `parent`, `child`,
+`refresh`, `toggle_mark`, `mark_all`, `create`, `copy_or_mark`,
+`delete_or_mark`, `first_entry`, `rename_or_mark`, `open_external`,
+`yank_path`, `search`, and `cycle_sort`.
+
 ## Notes
 
 - The first line shows the current directory with a trailing `/`. Entries start on the second line when present.

@@ -30,9 +30,106 @@ const ENTRY_DIR = 'dir'
 const ENTRY_FILE = 'file'
 const HEADER_LINE = 1
 const FIRST_ENTRY_LINE = HEADER_LINE + 1
+const FILER_MAPPING_SPECS = [
+  {action: 'close', lhs: 'q', plug: '<Plug>(filer-close)', nowait: false},
+  {action: 'enter', lhs: '<CR>', plug: '<Plug>(filer-enter)', nowait: false},
+  {action: 'duplicate', lhs: '<Tab>', plug: '<Plug>(filer-duplicate)', nowait: false},
+  {action: 'toggle_tree', lhs: 't', plug: '<Plug>(filer-toggle-tree)', nowait: false},
+  {action: 'toggle_tree_recursive', lhs: 'T', plug: '<Plug>(filer-toggle-tree-recursive)', nowait: false},
+  {action: 'home', lhs: '~', plug: '<Plug>(filer-go-home)', nowait: false},
+  {action: 'root', lhs: "\\", plug: '<Plug>(filer-go-root)', nowait: false},
+  {action: 'parent', lhs: 'h', plug: '<Plug>(filer-go-parent)', nowait: false},
+  {action: 'child', lhs: 'l', plug: '<Plug>(filer-go-child)', nowait: false},
+  {action: 'refresh', lhs: '.', plug: '<Plug>(filer-refresh)', nowait: false},
+  {action: 'toggle_mark', lhs: '<Space>', plug: '<Plug>(filer-toggle-mark)', nowait: true},
+  {action: 'mark_all', lhs: '*', plug: '<Plug>(filer-mark-all)', nowait: false},
+  {action: 'create', lhs: 'a', plug: '<Plug>(filer-create)', nowait: false},
+  {action: 'copy_or_mark', lhs: 'c', plug: '<Plug>(filer-copy-or-mark)', nowait: false},
+  {action: 'delete_or_mark', lhs: 'd', plug: '<Plug>(filer-delete-or-mark)', nowait: true},
+  {action: 'first_entry', lhs: 'gg', plug: '<Plug>(filer-jump-first-entry)', nowait: false},
+  {action: 'rename_or_mark', lhs: 'r', plug: '<Plug>(filer-rename-or-mark)', nowait: false},
+  {action: 'open_external', lhs: 'x', plug: '<Plug>(filer-open-external)', nowait: false},
+  {action: 'yank_path', lhs: 'yy', plug: '<Plug>(filer-yank-path)', nowait: false},
+  {action: 'search', lhs: '<C-F>', plug: '<Plug>(filer-search)', nowait: false},
+  {action: 'cycle_sort', lhs: 'S', plug: '<Plug>(filer-cycle-sort)', nowait: true},
+]
+const BATCH_MAPPING_SPECS = [
+  {action: 'close', lhs: 'q', plug: '<Plug>(filer-batch-close)', nowait: false},
+]
 
 def EscapeStatusline(text: string): string
   return substitute(text, '%', '%%', 'g')
+enddef
+
+def NoDefaultMappings(): bool
+  return get(g:, 'filer_no_default_mappings', false) ? true : false
+enddef
+
+def MappingConfig(var_name: string): dict<any>
+  var config = get(g:, var_name, {})
+  return type(config) == v:t_dict ? config : {}
+enddef
+
+def HasMappingConfig(var_name: string): bool
+  return type(get(g:, var_name, 0)) == v:t_dict
+enddef
+
+def MappingList(value: any): list<string>
+  if type(value) == v:t_string
+    return empty(value) ? [] : [value]
+  endif
+
+  if type(value) != v:t_list
+    return []
+  endif
+
+  var mappings: list<string> = []
+  for item in value
+    if type(item) == v:t_string && !empty(item)
+      add(mappings, item)
+    endif
+  endfor
+  return mappings
+enddef
+
+def HasBufferLocalNormalMapping(lhs: string): bool
+  var info = maparg(lhs, 'n', false, true)
+  return !empty(info) && get(info, 'buffer', 0) != 0
+enddef
+
+def MapKeyToPlug(lhs: string, plug: string, nowait: bool)
+  if HasBufferLocalNormalMapping(lhs)
+    return
+  endif
+
+  var flags = '<silent><buffer>'
+  if nowait
+    flags ..= '<nowait>'
+  endif
+  execute 'nmap ' .. flags .. ' ' .. lhs .. ' ' .. plug
+enddef
+
+def ApplyMappingSpecs(specs: list<dict<any>>, config_var_name: string)
+  var no_default = NoDefaultMappings()
+  var has_config = HasMappingConfig(config_var_name)
+  if no_default && !has_config
+    return
+  endif
+
+  var config = MappingConfig(config_var_name)
+  for spec in specs
+    var action: string = spec.action
+    if no_default && !has_key(config, action)
+      continue
+    endif
+
+    var plug: string = spec.plug
+    var lhs = get(config, action, spec.lhs)
+    var nowait: bool = spec.nowait
+    for key in MappingList(lhs)
+      MapKeyToPlug(key, plug, nowait)
+    endfor
+  endfor
 enddef
 
 def DisplayDir(path: string): string
@@ -784,6 +881,42 @@ def Render()
   UpdateStatusline(state)
 enddef
 
+def DefineFilerPlugMappings()
+  nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>close<CR>
+  nnoremap <silent><buffer> <Plug>(filer-enter) <Cmd>call filer#Enter()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-duplicate) <Cmd>call filer#DuplicateBuffer()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-toggle-tree) <Cmd>call filer#ToggleTree()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-toggle-tree-recursive) <Cmd>call filer#ExpandTreeRecursive()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-go-home) <Cmd>call filer#GoHome()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-go-root) <Cmd>call filer#GoRoot()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-go-parent) <Cmd>call filer#GoParent()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-go-child) <Cmd>call filer#GoChild()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-refresh) <Cmd>call filer#ReopenCurrentDir()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-toggle-mark) <Cmd>call filer#ToggleMark()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-mark-all) <Cmd>call filer#MarkAll()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-create) <Cmd>call filer#Create()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-copy-or-mark) <Cmd>call filer#CopyOrMark()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-delete-or-mark) <Cmd>call filer#DeleteOrMark()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-jump-first-entry) <Cmd>call filer#JumpToFirstEntry()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-rename-or-mark) <Cmd>call filer#RenameOrMark()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-external) <Cmd>call filer#OpenWithDefaultApplication()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-yank-path) <Cmd>call filer#YankCurrentPathToClipboard()<CR>
+  nnoremap <silent><buffer><expr> <Plug>(filer-search) filer#HandleCtrlF()
+  nnoremap <silent><buffer> <Plug>(filer-cycle-sort) <Cmd>call filer#CycleSort()<CR>
+enddef
+
+def ApplyFilerDefaultMappings()
+  ApplyMappingSpecs(FILER_MAPPING_SPECS, 'filer_mappings')
+enddef
+
+def DefineBatchPlugMappings()
+  nnoremap <silent><buffer> <Plug>(filer-batch-close) <Cmd>bwipeout<CR>
+enddef
+
+def ApplyBatchDefaultMappings()
+  ApplyMappingSpecs(BATCH_MAPPING_SPECS, 'filer_batch_mappings')
+enddef
+
 def SetupBuffer()
   var current_bufnr = bufnr('%')
   setlocal buftype=nofile
@@ -805,27 +938,8 @@ def SetupBuffer()
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
   augroup END
 
-  nnoremap <silent><buffer> q <Cmd>close<CR>
-  nnoremap <silent><buffer> <CR> <Cmd>call filer#Enter()<CR>
-  nnoremap <silent><buffer> <Tab> <Cmd>call filer#DuplicateBuffer()<CR>
-  nnoremap <silent><buffer> t <Cmd>call filer#ToggleTree()<CR>
-  nnoremap <silent><buffer> T <Cmd>call filer#ExpandTreeRecursive()<CR>
-  nnoremap <silent><buffer> ~ <Cmd>call filer#GoHome()<CR>
-  nnoremap <silent><buffer> \ <Cmd>call filer#GoRoot()<CR>
-  nnoremap <silent><buffer> h <Cmd>call filer#GoParent()<CR>
-  nnoremap <silent><buffer> l <Cmd>call filer#GoChild()<CR>
-  nnoremap <silent><buffer> . <Cmd>call filer#ReopenCurrentDir()<CR>
-  nnoremap <silent><buffer><nowait> <Space> <Cmd>call filer#ToggleMark()<CR>
-  nnoremap <silent><buffer> * <Cmd>call filer#MarkAll()<CR>
-  nnoremap <silent><buffer> a <Cmd>call filer#Create()<CR>
-  nnoremap <silent><buffer> c <Cmd>call filer#CopyOrMark()<CR>
-  nnoremap <silent><buffer><nowait> d <Cmd>call filer#DeleteOrMark()<CR>
-  nnoremap <silent><buffer> gg <Cmd>call filer#JumpToFirstEntry()<CR>
-  nnoremap <silent><buffer> r <Cmd>call filer#RenameOrMark()<CR>
-  nnoremap <silent><buffer> x <Cmd>call filer#OpenWithDefaultApplication()<CR>
-  nnoremap <silent><buffer> yy <Cmd>call filer#YankCurrentPathToClipboard()<CR>
-  nnoremap <silent><buffer><expr> <C-F> filer#HandleCtrlF()
-  nnoremap <silent><buffer><nowait> S <Cmd>call filer#CycleSort()<CR>
+  DefineFilerPlugMappings()
+  ApplyFilerDefaultMappings()
 enddef
 
 def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
@@ -997,7 +1111,8 @@ def SetupRenameBuffer(context: dict<any>)
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
   augroup END
 
-  nnoremap <silent><buffer> q <Cmd>bwipeout<CR>
+  DefineBatchPlugMappings()
+  ApplyBatchDefaultMappings()
 enddef
 
 def SetupCopyBuffer(context: dict<any>)
@@ -1017,7 +1132,8 @@ def SetupCopyBuffer(context: dict<any>)
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
   augroup END
 
-  nnoremap <silent><buffer> q <Cmd>bwipeout<CR>
+  DefineBatchPlugMappings()
+  ApplyBatchDefaultMappings()
 enddef
 
 def OpenRenameBuffer(state: dict<any>, paths: list<string>)

@@ -10,6 +10,7 @@ filer-batch-copy	filer.txt	/*filer-batch-copy*
 filer-batch-rename	filer.txt	/*filer-batch-rename*
 filer-c	filer.txt	/*filer-c*
 filer-commands	filer.txt	/*filer-commands*
+filer-configuration	filer.txt	/*filer-configuration*
 filer-contents	filer.txt	/*filer-contents*
 filer-d	filer.txt	/*filer-d*
 filer-dot	filer.txt	/*filer-dot*
@@ -36,3 +37,6 @@ filer-view	filer.txt	/*filer-view*
 filer-x	filer.txt	/*filer-x*
 filer-yy	filer.txt	/*filer-yy*
 filer.txt	filer.txt	/*filer.txt*
+g:filer_batch_mappings	filer.txt	/*g:filer_batch_mappings*
+g:filer_mappings	filer.txt	/*g:filer_mappings*
+g:filer_no_default_mappings	filer.txt	/*g:filer_no_default_mappings*

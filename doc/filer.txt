@@ -1,4 +1,4 @@
-*filer.txt*	Minimal file explorer implemented in Vim9 script
+*filer.txt*	*filer*	Minimal file explorer implemented in Vim9 script
 
 Author: Shintaro Mukai <shintaro@mukai.systems>
 Repository: https://github.com/mukaiizawa/vim9-filer
@@ -10,6 +10,7 @@ CONTENTS						*filer-contents*
 Introduction	|filer-introduction|
 Commands	|filer-commands|
 Mappings	|filer-mappings|
+Configuration	|filer-configuration|
 View		|filer-view|
 Marks		|filer-marks|
 Batch buffers	|filer-batch-buffers|
@@ -129,6 +130,89 @@ CTRL-F		Recursively search for file names under the current filer
 
 							*filer-S*
 S		Cycle the sort mode: "name" -> "size" -> "time".
+
+==============================================================================
+CONFIGURATION						*filer-configuration*
+
+							*g:filer_no_default_mappings*
+g:filer_no_default_mappings
+		When non-zero, filer does not define its default key mappings.
+		Buffer-local <Plug> mappings are still defined.
+
+>
+	g:filer_no_default_mappings = true
+
+	autocmd FileType filer nmap <buffer> o <Plug>(filer-enter)
+	autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
+	autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
+	autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
+<
+
+		Custom buffer-local mappings can also be defined directly with
+		<Plug> mappings.
+
+>
+	autocmd FileType filer nmap <buffer> <C-B> <Plug>(filer-search)
+<
+
+							*g:filer_mappings*
+g:filer_mappings
+		Dictionary for changing individual default mappings in filer
+		buffers.  Keys are action names.  Values are mapping left-hand
+		sides.  Use an empty string to disable one action, or a List to
+		assign multiple keys.
+
+>
+	g:filer_mappings = {
+	      'enter': 'o',
+	      'parent': 'H',
+	      'child': 'L',
+	      'search': '/',
+	      }
+
+	g:filer_mappings = {
+	      'open_external': '',
+	      'enter': ['<CR>', 'o'],
+	      }
+<
+
+		When |g:filer_no_default_mappings| is enabled, only explicitly
+		configured actions in g:filer_mappings are mapped.
+
+		Available action names:
+
+		close			<Plug>(filer-close)
+		enter			<Plug>(filer-enter)
+		duplicate		<Plug>(filer-duplicate)
+		toggle_tree		<Plug>(filer-toggle-tree)
+		toggle_tree_recursive	<Plug>(filer-toggle-tree-recursive)
+		home			<Plug>(filer-go-home)
+		root			<Plug>(filer-go-root)
+		parent			<Plug>(filer-go-parent)
+		child			<Plug>(filer-go-child)
+		refresh			<Plug>(filer-refresh)
+		toggle_mark		<Plug>(filer-toggle-mark)
+		mark_all		<Plug>(filer-mark-all)
+		create			<Plug>(filer-create)
+		copy_or_mark		<Plug>(filer-copy-or-mark)
+		delete_or_mark		<Plug>(filer-delete-or-mark)
+		first_entry		<Plug>(filer-jump-first-entry)
+		rename_or_mark		<Plug>(filer-rename-or-mark)
+		open_external		<Plug>(filer-open-external)
+		yank_path		<Plug>(filer-yank-path)
+		search			<Plug>(filer-search)
+		cycle_sort		<Plug>(filer-cycle-sort)
+
+							*g:filer_batch_mappings*
+g:filer_batch_mappings
+		Dictionary for changing default mappings in batch rename and
+		copy buffers.
+
+>
+	g:filer_batch_mappings = {
+	      'close': 'q',
+	      }
+<
 
 ==============================================================================
 VIEW							*filer-view*
