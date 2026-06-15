@@ -16,27 +16,39 @@ You can also pass a directory:
 :Filer path/to/dir
 ```
 
-Open the directory of the current buffer in a vertical split and jump to the current file with:
+Open the explorer directly in another window or tab with:
+
+```vim
+:FilerSplit path/to/dir
+:FilerVsplit path/to/dir
+:FilerTab path/to/dir
+```
+
+Open the directory of the current buffer and jump to the current file with:
 
 ```vim
 :FilerBufferDir
+:FilerBufferDir split
 ```
 
 This plugin disables netrw and replaces Vim's default directory buffer behavior by opening `filer` automatically when entering a directory.
 
 ## Key Bindings
 
-- `<CR>`: Open the item under the cursor. Files are edited, directories are entered.
-- `t`: Toggle directory expansion for the directory under the cursor.
-- `T`: Recursively toggle expansion for the directory under the cursor.
+- `<CR>` / `l`: Open the item under the cursor. Files use `g:filer_file_open_command`; directories use `g:filer_directory_open_command`.
+- `s`: Open the item under the cursor in a horizontal split.
+- `v`: Open the item under the cursor in a vertical split.
+- `t`: Open the item under the cursor in a new tab.
+- `o`: Open the file under the cursor with `:drop`. Directories are entered in the current window.
+- `za`: Toggle directory expansion for the directory under the cursor.
+- `zA`: Recursively toggle expansion for the directory under the cursor.
 - `~`: Redraw with the home directory as the root.
 - `\`: Redraw with the filesystem root as the root.
 - `h`: Redraw with the parent directory as the root.
-- `l`: Open a file, or redraw with the directory under the cursor as the root.
 - `.`: Re-open the current directory and redraw the view.
 - `gg`: Jump to the first entry.
+- `<Tab>`: Duplicate the current filer buffer with `g:filer_duplicate_command`.
 - `q`: Close the explorer.
-- `<Tab>`: Duplicate the current filer buffer in a vertical split.
 - `<Space>`: Toggle multi-selection.
 - `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
@@ -48,6 +60,21 @@ This plugin disables netrw and replaces Vim's default directory buffer behavior 
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
+## Opening Customization
+
+The same command names are used for file opens and filer windows:
+
+```vim
+g:filer_file_open_command = 'edit'
+g:filer_directory_open_command = 'edit'
+g:filer_launch_command = 'edit'
+g:filer_buffer_dir_command = 'vsplit'
+g:filer_duplicate_command = 'vsplit'
+```
+
+File opens accept `edit`, `split`, `vsplit`, `tabedit`, and `drop`. Filer
+windows accept `edit`, `split`, `vsplit`, and `tabedit`.
+
 ## Key Mapping Customization
 
 Default mappings can be disabled:
@@ -55,7 +82,7 @@ Default mappings can be disabled:
 ```vim
 g:filer_no_default_mappings = true
 
-autocmd FileType filer nmap <buffer> o <Plug>(filer-enter)
+autocmd FileType filer nmap <buffer> o <Plug>(filer-open)
 autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
 autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
 autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
@@ -72,9 +99,10 @@ Individual default mappings can also be changed with `g:filer_mappings`:
 
 ```vim
 g:filer_mappings = {
-      'enter': 'o',
+      'open': '<CR>',
+      'open_split': 's',
+      'open_vsplit': 'v',
       'parent': 'H',
-      'child': 'L',
       'search': '/',
       }
 ```
@@ -84,7 +112,7 @@ Use an empty string to disable one action, or a list to assign multiple keys:
 ```vim
 g:filer_mappings = {
       'open_external': '',
-      'enter': ['<CR>', 'o'],
+      'open': ['<CR>', 'l'],
       }
 ```
 
@@ -99,11 +127,11 @@ g:filer_batch_mappings = {
       }
 ```
 
-Available `g:filer_mappings` actions are `close`, `enter`, `duplicate`,
-`toggle_tree`, `toggle_tree_recursive`, `home`, `root`, `parent`, `child`,
-`refresh`, `toggle_mark`, `mark_all`, `create`, `copy_or_mark`,
-`delete_or_mark`, `first_entry`, `rename_or_mark`, `open_external`,
-`yank_path`, `search`, and `cycle_sort`.
+Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
+`open_vsplit`, `open_tab`, `open_drop`, `duplicate`, `toggle_tree`,
+`toggle_tree_recursive`, `home`, `root`, `parent`, `refresh`, `toggle_mark`,
+`mark_all`, `create`, `copy_or_mark`, `delete_or_mark`, `first_entry`,
+`rename_or_mark`, `open_external`, `yank_path`, `search`, and `cycle_sort`.
 
 ## Notes
 

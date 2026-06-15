@@ -31,25 +31,38 @@ automatically when Vim enters a directory buffer.  A filer buffer uses the
 ==============================================================================
 COMMANDS						*filer-commands*
 
-							*:Filer*
+								*:Filer*
 :Filer [dir]
-		Open a filer buffer for [dir].
+			Open a filer buffer for [dir].
 
-		When [dir] is omitted, the current working directory is used.  The
-		argument is completed as a directory.
+			When [dir] is omitted, the current working directory is used.  The
+			argument is completed as a directory.
 
 >
-	:Filer
-	:Filer path/to/dir
+		:Filer
+		:Filer path/to/dir
 <
 
-							*:FilerBufferDir*
-:FilerBufferDir
-		Open the directory of the current buffer in a vertical split and
-		jump to the current file.
+								*:FilerSplit*
+:FilerSplit [dir]
+			Open a filer buffer for [dir] in a horizontal split.
 
-		When the current buffer is already a filer buffer, reopen the same
-		filer directory without resetting expanded directories.
+								*:FilerVsplit*
+:FilerVsplit [dir]
+			Open a filer buffer for [dir] in a vertical split.
+
+								*:FilerTab*
+:FilerTab [dir]
+			Open a filer buffer for [dir] in a new tab.
+
+								*:FilerBufferDir*
+:FilerBufferDir [command]
+			Open the directory of the current buffer and jump to the
+			current file.  [command] may be "edit", "split", "vsplit", or
+			"tabedit".  When omitted, |g:filer_buffer_dir_command| is used.
+
+			When the current buffer is already a filer buffer, open the same
+			filer directory without resetting expanded directories.
 
 ==============================================================================
 MAPPINGS						*filer-mappings*
@@ -59,18 +72,41 @@ The following mappings are buffer-local to filer buffers.
 							*filer-q*
 q		Close the filer window.
 
-							*filer-enter*
-<CR>		Open the item under the cursor.  Files are edited.  Directories
-		are opened as the new filer root.
+								*filer-open*
+<CR>		Open the item under the cursor.  Files use
+			|g:filer_file_open_command|.  Directories use
+			|g:filer_directory_open_command|.
 
-							*filer-tab*
-<Tab>		Duplicate the current filer buffer in a vertical split.
+								*filer-l*
+l		Same as <CR>.
 
-							*filer-t*
-t		Toggle expansion for the directory under the cursor.
+								*filer-s*
+s		Open the item under the cursor in a horizontal split.  Files are
+			opened with ":split"; directories open a filer buffer in a
+			horizontal split.
 
-							*filer-T*
-T		Recursively toggle expansion for the directory under the cursor.
+								*filer-v*
+v		Open the item under the cursor in a vertical split.  Files are
+			opened with ":vsplit"; directories open a filer buffer in a
+			vertical split.
+
+								*filer-t*
+t		Open the item under the cursor in a new tab.  Files are opened
+			with ":tabedit"; directories open a filer buffer in a new tab.
+
+								*filer-o*
+o		Open the file under the cursor with ":drop".  Directories are
+			opened as the new filer root in the current window.
+
+								*filer-tab*
+<Tab>		Duplicate the current filer buffer with
+			|g:filer_duplicate_command|.
+
+								*filer-za*
+za		Toggle expansion for the directory under the cursor.
+
+								*filer-zA*
+zA		Recursively toggle expansion for the directory under the cursor.
 
 							*filer-home*
 ~		Redraw with the home directory as the root.
@@ -81,11 +117,7 @@ T		Recursively toggle expansion for the directory under the cursor.
 							*filer-h*
 h		Redraw with the parent directory as the root.
 
-							*filer-l*
-l		Open the item under the cursor.  Files are edited.  Directories
-		are opened as the new filer root.
-
-							*filer-dot*
+								*filer-dot*
 .		Re-open the current filer directory and redraw the view.
 
 							*filer-space*
@@ -134,18 +166,67 @@ S		Cycle the sort mode: "name" -> "size" -> "time".
 ==============================================================================
 CONFIGURATION						*filer-configuration*
 
-							*g:filer_no_default_mappings*
-g:filer_no_default_mappings
-		When non-zero, filer does not define its default key mappings.
-		Buffer-local <Plug> mappings are still defined.
+								*g:filer_file_open_command*
+g:filer_file_open_command
+			Command used by |filer-open| when the item under the cursor is a
+			file.  Valid values are "edit", "split", "vsplit", "tabedit",
+			and "drop".  Default: "edit".
 
 >
-	g:filer_no_default_mappings = true
+		g:filer_file_open_command = 'edit'
+<
 
-	autocmd FileType filer nmap <buffer> o <Plug>(filer-enter)
-	autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
-	autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
-	autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
+								*g:filer_directory_open_command*
+g:filer_directory_open_command
+			Command used by |filer-open| when the item under the cursor is a
+			directory.  Valid values are "edit", "split", "vsplit", and
+			"tabedit".  Default: "edit".
+
+>
+		g:filer_directory_open_command = 'edit'
+<
+
+								*g:filer_launch_command*
+g:filer_launch_command
+			Command used by |:Filer| and automatic directory buffers.  Valid
+			values are "edit", "split", "vsplit", and "tabedit".
+			Default: "edit".
+
+>
+		g:filer_launch_command = 'edit'
+<
+
+								*g:filer_buffer_dir_command*
+g:filer_buffer_dir_command
+			Command used by |:FilerBufferDir| when no command argument is
+			given.  Valid values are "edit", "split", "vsplit", and
+			"tabedit".  Default: "vsplit".
+
+>
+		g:filer_buffer_dir_command = 'vsplit'
+<
+
+								*g:filer_duplicate_command*
+g:filer_duplicate_command
+			Command used by |filer-tab|.  Valid values are "edit", "split",
+			"vsplit", and "tabedit".  Default: "vsplit".
+
+>
+		g:filer_duplicate_command = 'vsplit'
+<
+
+								*g:filer_no_default_mappings*
+g:filer_no_default_mappings
+			When non-zero, filer does not define its default key mappings.
+			Buffer-local <Plug> mappings are still defined.
+
+>
+		g:filer_no_default_mappings = true
+
+		autocmd FileType filer nmap <buffer> o <Plug>(filer-open)
+		autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
+		autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
+		autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
 <
 
 		Custom buffer-local mappings can also be defined directly with
@@ -163,17 +244,18 @@ g:filer_mappings
 		assign multiple keys.
 
 >
-	g:filer_mappings = {
-	      'enter': 'o',
-	      'parent': 'H',
-	      'child': 'L',
-	      'search': '/',
-	      }
+		g:filer_mappings = {
+		      'open': ['<CR>', 'l'],
+		      'open_split': 's',
+		      'open_vsplit': 'v',
+		      'parent': 'H',
+		      'search': '/',
+		      }
 
-	g:filer_mappings = {
-	      'open_external': '',
-	      'enter': ['<CR>', 'o'],
-	      }
+		g:filer_mappings = {
+		      'open_external': '',
+		      'open': '<CR>',
+		      }
 <
 
 		When |g:filer_no_default_mappings| is enabled, only explicitly
@@ -182,14 +264,17 @@ g:filer_mappings
 		Available action names:
 
 		close			<Plug>(filer-close)
-		enter			<Plug>(filer-enter)
+		open			<Plug>(filer-open)
+		open_split		<Plug>(filer-open-split)
+		open_vsplit		<Plug>(filer-open-vsplit)
+		open_tab		<Plug>(filer-open-tab)
+		open_drop		<Plug>(filer-open-drop)
 		duplicate		<Plug>(filer-duplicate)
 		toggle_tree		<Plug>(filer-toggle-tree)
 		toggle_tree_recursive	<Plug>(filer-toggle-tree-recursive)
 		home			<Plug>(filer-go-home)
 		root			<Plug>(filer-go-root)
 		parent			<Plug>(filer-go-parent)
-		child			<Plug>(filer-go-child)
 		refresh			<Plug>(filer-refresh)
 		toggle_mark		<Plug>(filer-toggle-mark)
 		mark_all		<Plug>(filer-mark-all)

@@ -30,16 +30,21 @@ const ENTRY_DIR = 'dir'
 const ENTRY_FILE = 'file'
 const HEADER_LINE = 1
 const FIRST_ENTRY_LINE = HEADER_LINE + 1
+const FILE_OPEN_COMMANDS = ['edit', 'split', 'vsplit', 'tabedit', 'drop']
+const FILER_OPEN_COMMANDS = ['edit', 'split', 'vsplit', 'tabedit']
 const FILER_MAPPING_SPECS = [
   {action: 'close', lhs: 'q', plug: '<Plug>(filer-close)', nowait: false},
-  {action: 'enter', lhs: '<CR>', plug: '<Plug>(filer-enter)', nowait: false},
+  {action: 'open', lhs: ['<CR>', 'l'], plug: '<Plug>(filer-open)', nowait: false},
+  {action: 'open_split', lhs: 's', plug: '<Plug>(filer-open-split)', nowait: false},
+  {action: 'open_vsplit', lhs: 'v', plug: '<Plug>(filer-open-vsplit)', nowait: false},
+  {action: 'open_tab', lhs: 't', plug: '<Plug>(filer-open-tab)', nowait: false},
+  {action: 'open_drop', lhs: 'o', plug: '<Plug>(filer-open-drop)', nowait: false},
   {action: 'duplicate', lhs: '<Tab>', plug: '<Plug>(filer-duplicate)', nowait: false},
-  {action: 'toggle_tree', lhs: 't', plug: '<Plug>(filer-toggle-tree)', nowait: false},
-  {action: 'toggle_tree_recursive', lhs: 'T', plug: '<Plug>(filer-toggle-tree-recursive)', nowait: false},
+  {action: 'toggle_tree', lhs: 'za', plug: '<Plug>(filer-toggle-tree)', nowait: false},
+  {action: 'toggle_tree_recursive', lhs: 'zA', plug: '<Plug>(filer-toggle-tree-recursive)', nowait: false},
   {action: 'home', lhs: '~', plug: '<Plug>(filer-go-home)', nowait: false},
   {action: 'root', lhs: "\\", plug: '<Plug>(filer-go-root)', nowait: false},
   {action: 'parent', lhs: 'h', plug: '<Plug>(filer-go-parent)', nowait: false},
-  {action: 'child', lhs: 'l', plug: '<Plug>(filer-go-child)', nowait: false},
   {action: 'refresh', lhs: '.', plug: '<Plug>(filer-refresh)', nowait: false},
   {action: 'toggle_mark', lhs: '<Space>', plug: '<Plug>(filer-toggle-mark)', nowait: true},
   {action: 'mark_all', lhs: '*', plug: '<Plug>(filer-mark-all)', nowait: false},
@@ -130,6 +135,45 @@ def ApplyMappingSpecs(specs: list<dict<any>>, config_var_name: string)
       MapKeyToPlug(key, plug, nowait)
     endfor
   endfor
+enddef
+
+def ConfigString(var_name: string, default_value: string): string
+  var value = get(g:, var_name, default_value)
+  return type(value) == v:t_string ? value : default_value
+enddef
+
+def ResolveOpenCommand(command: string, config_var_name: string, default_command: string, allowed_commands: list<string>): string
+  var resolved = empty(command) ? ConfigString(config_var_name, default_command) : command
+  if index(allowed_commands, resolved) >= 0
+    return resolved
+  endif
+
+  echoerr $'Invalid g:{config_var_name}: {resolved}. Expected one of: {join(allowed_commands, ", ")}'
+  return default_command
+enddef
+
+def ResolveFileOpenCommand(command: string = ''): string
+  return ResolveOpenCommand(command, 'filer_file_open_command', 'edit', FILE_OPEN_COMMANDS)
+enddef
+
+def ResolveDirectoryOpenCommand(command: string = ''): string
+  if command ==# 'drop'
+    return 'edit'
+  endif
+
+  return ResolveOpenCommand(command, 'filer_directory_open_command', 'edit', FILER_OPEN_COMMANDS)
+enddef
+
+def ResolveLaunchCommand(command: string = ''): string
+  return ResolveOpenCommand(command, 'filer_launch_command', 'edit', FILER_OPEN_COMMANDS)
+enddef
+
+def ResolveBufferDirCommand(command: string = ''): string
+  return ResolveOpenCommand(command, 'filer_buffer_dir_command', 'vsplit', FILER_OPEN_COMMANDS)
+enddef
+
+def ResolveDuplicateCommand(command: string = ''): string
+  return ResolveOpenCommand(command, 'filer_duplicate_command', 'vsplit', FILER_OPEN_COMMANDS)
 enddef
 
 def DisplayDir(path: string): string
@@ -883,14 +927,17 @@ enddef
 
 def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>close<CR>
-  nnoremap <silent><buffer> <Plug>(filer-enter) <Cmd>call filer#Enter()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open) <Cmd>call filer#OpenCurrentEntry()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-split) <Cmd>call filer#OpenCurrentEntry('split')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-vsplit) <Cmd>call filer#OpenCurrentEntry('vsplit')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-tab) <Cmd>call filer#OpenCurrentEntry('tabedit')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-drop) <Cmd>call filer#OpenCurrentEntry('drop')<CR>
   nnoremap <silent><buffer> <Plug>(filer-duplicate) <Cmd>call filer#DuplicateBuffer()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-tree) <Cmd>call filer#ToggleTree()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-tree-recursive) <Cmd>call filer#ExpandTreeRecursive()<CR>
   nnoremap <silent><buffer> <Plug>(filer-go-home) <Cmd>call filer#GoHome()<CR>
   nnoremap <silent><buffer> <Plug>(filer-go-root) <Cmd>call filer#GoRoot()<CR>
   nnoremap <silent><buffer> <Plug>(filer-go-parent) <Cmd>call filer#GoParent()<CR>
-  nnoremap <silent><buffer> <Plug>(filer-go-child) <Cmd>call filer#GoChild()<CR>
   nnoremap <silent><buffer> <Plug>(filer-refresh) <Cmd>call filer#ReopenCurrentDir()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-mark) <Cmd>call filer#ToggleMark()<CR>
   nnoremap <silent><buffer> <Plug>(filer-mark-all) <Cmd>call filer#MarkAll()<CR>
@@ -1014,13 +1061,13 @@ def MovePath(source: string, destination: string)
   endif
 enddef
 
-def EditFile(path: string): bool
+def OpenFile(path: string, command: string = ''): bool
   if IsBrokenLink(path)
     WarnBrokenLink(path)
     return false
   endif
 
-  execute 'edit ' .. fnameescape(path)
+  execute ResolveFileOpenCommand(command) .. ' ' .. fnameescape(path)
   return true
 enddef
 
@@ -1361,26 +1408,41 @@ def OpenOrReuse(dir: string, reset_tree: bool = true)
   OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
-def OpenInSplit(dir: string, reset_tree: bool = true)
-  vsplit
-  enew
+def OpenEmptyWindow(command: string)
+  if command ==# 'split'
+    new
+  elseif command ==# 'vsplit'
+    vnew
+  elseif command ==# 'tabedit'
+    tabnew
+  endif
+enddef
+
+def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
+  if command ==# 'edit'
+    OpenOrReuse(dir, reset_tree)
+    return
+  endif
+
+  OpenEmptyWindow(command)
   OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
-export def Open(dir_arg: string = '', reset_tree: bool = true)
+export def Open(dir_arg: string = '', command: string = '', reset_tree: bool = true)
   var dir = NormalizeDir(dir_arg)
   if !isdirectory(dir)
     echoerr $'Not a directory: {dir}'
     return
   endif
 
-  OpenOrReuse(dir, reset_tree)
+  OpenFilerWithCommand(dir, ResolveLaunchCommand(command), reset_tree)
 enddef
 
-export def OpenBufferDir()
+export def OpenBufferDir(command: string = '')
+  var open_command = ResolveBufferDirCommand(command)
   if &filetype ==# 'filer'
     var state = EnsureState()
-    Open(state.cwd, false)
+    OpenFilerWithCommand(state.cwd, open_command, false)
     return
   endif
 
@@ -1389,15 +1451,15 @@ export def OpenBufferDir()
   if empty(dir)
     dir = getcwd()
   endif
-  OpenInSplit(dir)
+  OpenFilerWithCommand(dir, open_command)
   if !empty(target)
     JumpToPath(target)
   endif
 enddef
 
-export def DuplicateBuffer()
+export def DuplicateBuffer(command: string = '')
   var state = EnsureState()
-  OpenInSplit(state.cwd, false)
+  OpenFilerWithCommand(state.cwd, ResolveDuplicateCommand(command), false)
 enddef
 
 export def Refresh()
@@ -1407,7 +1469,7 @@ export def Refresh()
   RefreshState(state, current_path)
 enddef
 
-export def Enter()
+export def OpenCurrentEntry(command: string = '')
   var state = EnsureState()
   var entry = CurrentEntry(state)
   if empty(entry)
@@ -1415,12 +1477,13 @@ export def Enter()
   endif
 
   if entry.kind ==# ENTRY_FILE
-    EditFile(entry.path)
+    OpenFile(entry.path, command)
     return
   endif
 
-  Open(entry.path)
-  JumpToFirstEntry()
+  if entry.kind ==# ENTRY_DIR
+    OpenFilerWithCommand(entry.path, ResolveDirectoryOpenCommand(command))
+  endif
 enddef
 
 export def ToggleTree()
@@ -1460,42 +1523,23 @@ enddef
 export def GoParent()
   var state = EnsureState()
   var current_dir = state.cwd
-  Open(ParentDir(current_dir))
+  OpenFilerWithCommand(ParentDir(current_dir), 'edit')
   JumpToPath(current_dir)
 enddef
 
 export def GoHome()
-  Open('~')
+  OpenFilerWithCommand(NormalizeDir('~'), 'edit')
 enddef
 
 export def GoRoot()
   var state = EnsureState()
-  Open(FilesystemRoot(state.cwd))
-enddef
-
-export def GoChild()
-  var state = EnsureState()
-  var entry = CurrentEntry(state)
-  if empty(entry)
-    return
-  endif
-
-  if entry.kind ==# ENTRY_FILE
-    EditFile(entry.path)
-    return
-  endif
-
-  if entry.kind !=# ENTRY_DIR
-    return
-  endif
-
-  Open(entry.path)
+  OpenFilerWithCommand(FilesystemRoot(state.cwd), 'edit')
 enddef
 
 export def ReopenCurrentDir()
   var state = EnsureState()
   var current_dir = state.cwd
-  Open(current_dir)
+  OpenFilerWithCommand(current_dir, 'edit')
 enddef
 
 export def ToggleMark()
