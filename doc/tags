@@ -56,3 +56,4 @@ g:filer_file_open_command	filer.txt	/*g:filer_file_open_command*
 g:filer_launch_command	filer.txt	/*g:filer_launch_command*
 g:filer_mappings	filer.txt	/*g:filer_mappings*
 g:filer_no_default_mappings	filer.txt	/*g:filer_no_default_mappings*
+g:filer_view	filer.txt	/*g:filer_view*

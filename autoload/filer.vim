@@ -6,12 +6,14 @@ var copy_state_by_bufnr: dict<any> = {}
 var last_open_error = ''
 var active_jobs: list<job> = []
 
-const TREE_INDENTATION = 1
-const TREE_LEAF_ICON = '|'
-const TREE_OPENED_ICON = '-'
-const TREE_CLOSED_ICON = '+'
-const FILE_ICON = ' '
-const MARKED_FILE_ICON = '*'
+const DEFAULT_TREE_INDENTATION = 2
+const DEFAULT_TREE_ICONS = {
+  leaf: '|',
+  opened: '-',
+  closed: '+',
+  file: ' ',
+  marked: '*',
+}
 const SORT_MODES = ['name', 'size', 'time']
 const TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M'
 const SECONDS_PER_DAY = 24 * 60 * 60
@@ -77,6 +79,40 @@ enddef
 
 def HasMappingConfig(var_name: string): bool
   return type(get(g:, var_name, 0)) == v:t_dict
+enddef
+
+def ViewConfig(): dict<any>
+  var config = get(g:, 'filer_view', {})
+  return type(config) == v:t_dict ? config : {}
+enddef
+
+def ViewIndent(): number
+  var value = get(ViewConfig(), 'indent', DEFAULT_TREE_INDENTATION)
+  return type(value) == v:t_number && value >= 0 ? value : DEFAULT_TREE_INDENTATION
+enddef
+
+def ViewIcons(): dict<any>
+  var icons = copy(DEFAULT_TREE_ICONS)
+  var configured_icons = get(ViewConfig(), 'icons', {})
+  if type(configured_icons) != v:t_dict
+    return icons
+  endif
+
+  for key in keys(icons)
+    var value = get(configured_icons, key, icons[key])
+    if type(value) == v:t_string && !empty(value)
+      icons[key] = value
+    endif
+  endfor
+  return icons
+enddef
+
+export def ResolvedViewIndent(): number
+  return ViewIndent()
+enddef
+
+export def ResolvedViewIcons(): dict<any>
+  return ViewIcons()
 enddef
 
 def MappingList(value: any): list<string>
@@ -441,7 +477,7 @@ def MakeFilesystemEntry(name: string, path: string, depth: number): dict<any>
 enddef
 
 def EntryDepthPrefix(depth: number): string
-  return repeat(' ', depth * TREE_INDENTATION)
+  return repeat(' ', depth * ResolvedViewIndent())
 enddef
 
 def MakeState(dir: string): dict<any>
@@ -592,17 +628,20 @@ def IsMarked(state: dict<any>, path: string): bool
 enddef
 
 def DisplayName(state: dict<any>, entry: dict<any>): string
-  var mark = IsMarked(state, entry.path) ? MARKED_FILE_ICON : ' '
+  var icons = ResolvedViewIcons()
+  var mark = IsMarked(state, entry.path)
+    ? icons.marked
+    : repeat(' ', strdisplaywidth(icons.marked))
   var prefix = EntryDepthPrefix(entry.depth)
 
   if entry.kind ==# ENTRY_DIR
     var icon = get(state.expanded_dirs, entry.path, false) && empty(state.file_search_query)
-      ? TREE_OPENED_ICON
-      : TREE_CLOSED_ICON
+      ? icons.opened
+      : icons.closed
     return prefix .. mark .. icon .. ' ' .. entry.name .. '/'
   endif
 
-  return prefix .. mark .. TREE_LEAF_ICON .. FILE_ICON .. entry.name
+  return prefix .. mark .. icons.leaf .. icons.file .. entry.name
 enddef
 
 def TruncateDisplayText(text: string, max_width: number): string

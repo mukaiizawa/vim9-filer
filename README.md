@@ -79,6 +79,26 @@ g:filer_duplicate_command = 'vsplit'
 File opens accept `edit`, `split`, `vsplit`, `tabedit`, and `drop`. Filer
 windows accept `edit`, `split`, `vsplit`, and `tabedit`.
 
+## View Customization
+
+Tree indentation and icons can be changed with `g:filer_view`:
+
+```vim
+g:filer_view = {
+      'indent': 2,
+      'icons': {
+            'leaf': '|',
+            'opened': '-',
+            'closed': '+',
+            'file': ' ',
+            'marked': '*',
+            },
+      }
+```
+
+All keys are optional. `indent` defaults to `2`. Icon values must be non-empty
+strings; invalid or empty values fall back to the defaults.
+
 ## API
 
 Use `filer#BufferDir()` to get the directory shown by the current filer buffer.
@@ -158,7 +178,7 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - Each entry shows name, file size, and modification time. When either value is unavailable, `-` is shown instead. Directories do not show a size.
 - When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
-- Selected items are marked with `*`.
+- Selected items are marked with the configured mark icon. The default is `*`.
 - Marks are cleared when changing directories or when the `filer` buffer is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.

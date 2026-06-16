@@ -243,6 +243,30 @@ g:filer_duplicate_command
 		g:filer_duplicate_command = 'vsplit'
 <
 
+								*g:filer_view*
+g:filer_view
+			Dictionary for changing filer view formatting.
+
+			"indent" controls the number of spaces used for each tree
+			depth.  Default: 2.
+
+			"icons" is a Dictionary for changing the tree and mark icons.
+			All keys are optional.  Icon values must be non-empty Strings;
+			invalid or empty values fall back to the defaults.  Defaults:
+
+>
+		g:filer_view = {
+		      'indent': 2,
+		      'icons': {
+			    'leaf': '|',
+			    'opened': '-',
+			    'closed': '+',
+			    'file': ' ',
+			    'marked': '*',
+			    },
+		      }
+<
+
 								*g:filer_no_default_mappings*
 g:filer_no_default_mappings
 			When non-zero, filer does not define its default key mappings.
@@ -349,7 +373,8 @@ mode plus "[current/total]" entry position on the right.
 ==============================================================================
 MARKS							*filer-marks*
 
-Selected items are marked with "*".  Marks are local to a filer buffer.
+Selected items are marked with the configured mark icon.  The default is "*".
+Marks are local to a filer buffer.
 
 Marks are cleared when changing directories, when the filer buffer is hidden,
 and when the filer buffer is closed.
