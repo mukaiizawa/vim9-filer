@@ -1019,7 +1019,6 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   else
     state.expanded_dirs[state.cwd] = true
   endif
-  execute 'lcd ' .. fnameescape(state.cwd)
   DoVisitDirAutocmd()
 enddef
 
