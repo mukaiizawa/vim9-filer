@@ -3,7 +3,9 @@
 :FilerSplit	filer.txt	/*:FilerSplit*
 :FilerTab	filer.txt	/*:FilerTab*
 :FilerVsplit	filer.txt	/*:FilerVsplit*
+FilerVisitDir	filer.txt	/*FilerVisitDir*
 filer	filer.txt	/*filer*
+filer#BufferDir()	filer.txt	/*filer#BufferDir()*
 filer-CTRL-F	filer.txt	/*filer-CTRL-F*
 filer-S	filer.txt	/*filer-S*
 filer-a	filer.txt	/*filer-a*
@@ -16,6 +18,8 @@ filer-configuration	filer.txt	/*filer-configuration*
 filer-contents	filer.txt	/*filer-contents*
 filer-d	filer.txt	/*filer-d*
 filer-dot	filer.txt	/*filer-dot*
+filer-events	filer.txt	/*filer-events*
+filer-functions	filer.txt	/*filer-functions*
 filer-gg	filer.txt	/*filer-gg*
 filer-h	filer.txt	/*filer-h*
 filer-home	filer.txt	/*filer-home*

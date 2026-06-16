@@ -10,6 +10,8 @@ CONTENTS						*filer-contents*
 Introduction	|filer-introduction|
 Commands	|filer-commands|
 Mappings	|filer-mappings|
+Functions	|filer-functions|
+Events		|filer-events|
 Configuration	|filer-configuration|
 View		|filer-view|
 Marks		|filer-marks|
@@ -165,6 +167,29 @@ CTRL-F		Recursively search for file names under the current filer
 
 							*filer-S*
 S		Cycle the sort mode: "name" -> "size" -> "time".
+
+==============================================================================
+FUNCTIONS						*filer-functions*
+
+							*filer#BufferDir()*
+filer#BufferDir([{bufnr}])
+		Return the directory shown by the filer buffer {bufnr}.  When
+		{bufnr} is omitted, the current buffer is used.
+
+		Returns an empty string when the buffer is not a live filer buffer.
+
+==============================================================================
+EVENTS							*filer-events*
+
+							*FilerVisitDir*
+FilerVisitDir
+		Triggered with |User| when a filer buffer visits a directory.  This
+		includes opening a filer buffer, changing the filer root, reopening
+		the current root, and entering an existing filer buffer.
+
+>
+		autocmd User FilerVisitDir echomsg filer#BufferDir()
+<
 
 ==============================================================================
 CONFIGURATION						*filer-configuration*

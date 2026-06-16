@@ -79,6 +79,20 @@ g:filer_duplicate_command = 'vsplit'
 File opens accept `edit`, `split`, `vsplit`, `tabedit`, and `drop`. Filer
 windows accept `edit`, `split`, `vsplit`, and `tabedit`.
 
+## API
+
+Use `filer#BufferDir()` to get the directory shown by the current filer buffer.
+Pass a buffer number to inspect another filer buffer. It returns an empty string
+when the buffer is not a live filer buffer.
+
+`User FilerVisitDir` is triggered when a filer buffer visits a directory,
+including opening a filer buffer, changing the filer root, reopening the current
+root, or entering an existing filer buffer.
+
+```vim
+autocmd User FilerVisitDir echomsg filer#BufferDir()
+```
+
 ## Key Mapping Customization
 
 Default mappings can be disabled:

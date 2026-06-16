@@ -467,6 +467,22 @@ def EnsureState(): dict<any>
   return state_by_bufnr[bufnr]
 enddef
 
+export def BufferDir(bufnr: number = bufnr('%')): string
+  if !has_key(state_by_bufnr, bufnr)
+    return ''
+  endif
+
+  return get(state_by_bufnr[bufnr], 'cwd', '')
+enddef
+
+def DoVisitDirAutocmd()
+  if empty(BufferDir())
+    return
+  endif
+
+  doautocmd <nomodeline> User FilerVisitDir
+enddef
+
 def CompareItems(dir: string, sort_mode: string, left_name: string, right_name: string): number
   var left_path = JoinPath(dir, left_name)
   var right_path = JoinPath(dir, right_name)
@@ -981,6 +997,7 @@ def SetupBuffer()
 
   augroup filer_buffer_lifecycle
     execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufEnter <buffer=' .. current_bufnr .. '> doautocmd <nomodeline> User FilerVisitDir'
     execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call filer#ClearMarksForCurrentBuffer()'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
   augroup END
@@ -1003,12 +1020,7 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
     state.expanded_dirs[state.cwd] = true
   endif
   execute 'lcd ' .. fnameescape(state.cwd)
-  if exists('*unite#repo#Append')
-    try
-      unite#repo#Append(state.cwd)
-    catch
-    endtry
-  endif
+  DoVisitDirAutocmd()
 enddef
 
 def RefreshState(state: dict<any>, cursor_path: string = '')
