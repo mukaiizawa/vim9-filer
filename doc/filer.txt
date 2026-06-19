@@ -439,9 +439,9 @@ LIMITATIONS						*filer-limitations*
 Basic operation on Windows is supported within the same drive.  Renaming across
 drives on Windows is not supported.
 
-Opening files with the OS default application uses:
+Opening items with the OS default application uses:
 
-	Windows		powershell Start-Process
+	Windows		powershell Start-Process; explorer.exe for directories
 	macOS		open
 	Other Unix	xdg-open
 

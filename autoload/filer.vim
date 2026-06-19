@@ -869,6 +869,11 @@ def StartJob(cmd: list<string>): bool
   try
     var current_job = job_start(cmd)
     if type(current_job) == v:t_job
+      if job_status(current_job) ==# 'fail'
+        SetLastOpenError($'job_start() failed for {string(cmd)}')
+        return false
+      endif
+
       TrackJob(current_job)
       ClearLastOpenError()
       return true
@@ -885,11 +890,26 @@ def SingleQuoteForPowerShell(path: string): string
   return "'" .. substitute(path, "'", "''", 'g') .. "'"
 enddef
 
+def PowerShellCommand(script: string): list<string>
+  return ['powershell', '-NoProfile', '-Command', script]
+enddef
+
+def WindowsOpenDirectoryCommand(normalized: string): list<string>
+  var native = NativePath(normalized)
+  var argument = '/n,"' .. native .. '"'
+  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell(argument)
+  return PowerShellCommand(ps)
+enddef
+
+def WindowsOpenFileCommand(normalized: string): list<string>
+  var native = NativePath(normalized)
+  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
+  return PowerShellCommand(ps)
+enddef
+
 def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
-    var native = NativePath(normalized)
-    var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
-    return ['powershell', '-NoProfile', '-Command', ps]
+    return IsDirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
   endif
 
   if IsMac()
@@ -907,6 +927,11 @@ def OpenPathWithDefaultApplication(target: string): bool
   var normalized = NormalizePath(target)
   if empty(normalized)
     SetLastOpenError('empty target path')
+    return false
+  endif
+
+  if !PathExists(normalized)
+    SetLastOpenError($'target path does not exist: {normalized}')
     return false
   endif
 
@@ -1927,7 +1952,7 @@ export def OpenWithDefaultApplication()
   endif
 
   if OpenPathWithDefaultApplication(path)
-    Notify($'Opened with default application: {path}')
+    Notify($'Opening with default application: {path}')
     return
   endif
 
