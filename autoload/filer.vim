@@ -1547,6 +1547,10 @@ enddef
 export def OpenCurrentEntry(command: string = '')
   var state = EnsureState()
   var entry = CurrentEntry(state)
+  if line('.') == HEADER_LINE
+    entry = MakeEntry(ENTRY_DIR, state.cwd, state.cwd, 0)
+  endif
+
   if empty(entry)
     return
   endif

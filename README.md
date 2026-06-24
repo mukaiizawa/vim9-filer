@@ -39,11 +39,11 @@ netrw.
 
 ## Key Bindings
 
-- `<CR>` / `l`: Open the item under the cursor. Files use `g:filer_file_open_command`; directories use `g:filer_directory_open_command`.
+- `<CR>` / `l`: Open the item under the cursor. Files use `g:filer_file_open_command`; directories use `g:filer_directory_open_command`. On the first line, open the current directory.
 - `s`: Open the item under the cursor in a horizontal split.
 - `v`: Open the item under the cursor in a vertical split.
 - `t`: Open the item under the cursor in a new tab.
-- `o`: Open the file under the cursor with `:drop`. Directories are entered in the current window.
+- `o`: Open the file under the cursor with `:drop`. Directories are entered in the current window. On the first line, enter the current directory.
 - `za`: Toggle directory expansion for the directory under the cursor.
 - `zA`: Recursively toggle expansion for the directory under the cursor.
 - `~`: Redraw with the home directory as the root.

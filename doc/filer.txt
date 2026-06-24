@@ -80,7 +80,9 @@ q		Close the filer window.
 								*filer-open*
 <CR>		Open the item under the cursor.  Files use
 			|g:filer_file_open_command|.  Directories use
-			|g:filer_directory_open_command|.
+			|g:filer_directory_open_command|.  On the header line, the
+			current filer directory is treated as the item under the
+			cursor.
 
 								*filer-l*
 l		Same as <CR>.
@@ -101,7 +103,9 @@ t		Open the item under the cursor in a new tab.  Files are opened
 
 								*filer-o*
 o		Open the file under the cursor with ":drop".  Directories are
-			opened as the new filer root in the current window.
+			opened as the new filer root in the current window.  On the
+			header line, the current filer directory is opened as the new
+			filer root in the current window.
 
 								*filer-tab*
 <Tab>		Duplicate the current filer buffer with
