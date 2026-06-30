@@ -40,7 +40,7 @@ SyntaxMatch('FilerHeader', '\%1l.*$')
 SyntaxMatch('FilerMarked', '^\s*\zs' .. mark_pattern .. '\ze')
 var tree_pattern = '^\s*' .. row_mark_prefix .. '\zs\%(' .. tree_icon_pattern .. '\)'
 SyntaxMatch('FilerTreeIcon', tree_pattern)
-var dir_pattern = '^\s*' .. row_mark_prefix .. '\%(' .. dir_icon_pattern .. '\) .\{-}\/' .. metadata_tail_pattern
+var dir_pattern = '^\s*' .. row_mark_prefix .. '\%(' .. dir_icon_pattern .. '\) .\{-}\%(/\)\?' .. metadata_tail_pattern
 SyntaxMatch('FilerDirectory', dir_pattern)
 var file_pattern = '^\s*' .. row_mark_prefix .. LiteralPattern(leaf_icon) .. LiteralPattern(file_icon) .. '.\{-}' .. metadata_tail_pattern
 SyntaxMatch('FilerFile', file_pattern)

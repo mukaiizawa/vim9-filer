@@ -644,7 +644,18 @@ def DisplayName(state: dict<any>, entry: dict<any>): string
   return prefix .. mark .. icons.leaf .. icons.file .. entry.name
 enddef
 
-def TruncateDisplayText(text: string, max_width: number): string
+def TruncateDisplayMarker(marker: string, max_width: number): string
+  var head = ''
+  for char in split(marker, '\zs')
+    if strdisplaywidth(head .. char) > max_width
+      break
+    endif
+    head ..= char
+  endfor
+  return head
+enddef
+
+def TruncateDisplayText(text: string, max_width: number, marker: string = '...'): string
   if max_width <= 0
     return ''
   endif
@@ -653,18 +664,23 @@ def TruncateDisplayText(text: string, max_width: number): string
     return text
   endif
 
-  if max_width <= 3
-    return repeat('.', max_width)
+  var marker_width = strdisplaywidth(marker)
+  if max_width <= marker_width
+    return TruncateDisplayMarker(marker, max_width)
   endif
 
   var head = ''
   for char in split(text, '\zs')
-    if strdisplaywidth(head .. char .. '...') > max_width
+    if strdisplaywidth(head .. char .. marker) > max_width
       break
     endif
     head ..= char
   endfor
-  return head .. '...'
+  return head .. marker
+enddef
+
+def EntryTruncationMarker(entry: dict<any>): string
+  return entry.kind ==# ENTRY_DIR ? '.../' : '...'
 enddef
 
 def EntryMtime(entry: dict<any>): number
@@ -807,11 +823,11 @@ def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   var meta = size .. ' ' .. timestamp
 
   if width <= META_RESERVED_WIDTH + 1
-    return TruncateDisplayText(name, width)
+    return TruncateDisplayText(name, width, EntryTruncationMarker(entry))
   endif
 
   var name_width = width - META_RESERVED_WIDTH - 1
-  var left = TruncateDisplayText(name, name_width)
+  var left = TruncateDisplayText(name, name_width, EntryTruncationMarker(entry))
   return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
 enddef
 
