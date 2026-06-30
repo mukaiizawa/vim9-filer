@@ -107,23 +107,13 @@ def ViewIcons(): dict<any>
   return icons
 enddef
 
-export def ResolvedViewIndent(): number
-  return ViewIndent()
-enddef
-
-export def ResolvedViewIcons(): dict<any>
-  return ViewIcons()
-enddef
-
 def MappingList(value: any): list<string>
   if type(value) == v:t_string
     return empty(value) ? [] : [value]
   endif
-
   if type(value) != v:t_list
     return []
   endif
-
   var mappings: list<string> = []
   for item in value
     if type(item) == v:t_string && !empty(item)
@@ -142,7 +132,6 @@ def MapKeyToPlug(lhs: string, plug: string, nowait: bool)
   if HasBufferLocalNormalMapping(lhs)
     return
   endif
-
   var flags = '<silent><buffer>'
   if nowait
     flags ..= '<nowait>'
@@ -156,14 +145,12 @@ def ApplyMappingSpecs(specs: list<dict<any>>, config_var_name: string)
   if no_default && !has_config
     return
   endif
-
   var config = MappingConfig(config_var_name)
   for spec in specs
     var action: string = spec.action
     if no_default && !has_key(config, action)
       continue
     endif
-
     var plug: string = spec.plug
     var lhs = get(config, action, spec.lhs)
     var nowait: bool = spec.nowait
@@ -499,14 +486,6 @@ def EnsureState(): dict<any>
   return state_by_bufnr[bufnr]
 enddef
 
-export def BufferDir(bufnr: number = bufnr('%')): string
-  if !has_key(state_by_bufnr, bufnr)
-    return ''
-  endif
-
-  return get(state_by_bufnr[bufnr], 'cwd', '')
-enddef
-
 def DoVisitDirAutocmd()
   if empty(BufferDir())
     return
@@ -609,23 +588,47 @@ enddef
 
 def BuildEntries(state: dict<any>): list<dict<any>>
   var entries: list<dict<any>> = []
-
   if empty(state.file_search_query)
     AddTreeEntries(entries, state.cwd, 0, state)
   else
     SearchTree(state.cwd, state.cwd, state, entries)
   endif
-
   return entries
 enddef
 
-def IsMarked(state: dict<any>, path: string): bool
-  return get(state.marked_paths, path, false)
+# Mark API
+
+def IsMarked(state: dict<any>, entry: dict<any>): bool
+  if empty(entry)
+    return false
+  endif
+  return get(state.marked_paths, entry.path, false)
+enddef
+
+def MarkEntry(state: dict<any>, entry: dict<any>)
+  if empty(entry)
+    return
+  endif
+  state.marked_paths[entry.path] = true
+enddef
+
+def MarkCurrentEntry(state: dict<any>)
+  MarkEntry(state, CurrentEntry(state))
+enddef
+
+def MarkCount(state: dict<any>): number
+  return len(keys(state.marked_paths))
+enddef
+
+def RemoveMark(state: dict<any>, entry: dict<any>)
+  if IsMarked(state, entry)
+    remove(state.marked_paths, entry.path)
+  endif
 enddef
 
 def DisplayName(state: dict<any>, entry: dict<any>): string
   var icons = ResolvedViewIcons()
-  var mark = IsMarked(state, entry.path)
+  var mark = IsMarked(state, entry)
     ? icons.marked
     : repeat(' ', strdisplaywidth(icons.marked))
   var prefix = EntryDepthPrefix(entry.depth)
@@ -827,16 +830,11 @@ def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
 enddef
 
-def MarkCount(state: dict<any>): number
-  return len(keys(state.marked_paths))
-enddef
-
 def CurrentEntryPosition(state: dict<any>): number
   var total = len(state.entries)
   if total == 0
     return 0
   endif
-
   return min([max([line('.') - HEADER_LINE, 1]), total])
 enddef
 
@@ -969,37 +967,25 @@ def JumpToPath(target_path: string)
   JumpToFirstEntry()
 enddef
 
-export def JumpToFirstEntry()
-  cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
-enddef
-
-export def JumpToTop()
-  JumpToFirstEntry()
-enddef
-
 def Render()
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
     return
   endif
-
   var state = state_by_bufnr[bufnr]
   var previous_last_lnum = line('$')
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
   var timestamp_highlights: list<dict<any>> = []
-
   var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
   for index in range(len(state.entries))
     var entry = state.entries[index]
     var line = FormatEntryLine(state, entry, width)
     add(lines, line)
-
     var timestamp = EntryTimestamp(entry)
     if !HasVisibleTimestamp(line, timestamp)
       continue
     endif
-
     add(timestamp_highlights, {
       lnum: EntryLine(index),
       col: TimestampColumn(line, timestamp),
@@ -1098,47 +1084,12 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   DoVisitDirAutocmd()
 enddef
 
-export def RefreshCurrentWindow()
-  var bufnr = bufnr('%')
-  if &filetype !=# 'filer' || !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-
-  Render()
-enddef
-
-export def RefreshResizedWindows()
-  if empty(state_by_bufnr)
-    return
-  endif
-
-  for winid in get(v:event, 'windows', [])
-    win_execute(winid, 'silent call filer#RefreshCurrentWindow()')
-  endfor
-enddef
-
-def RemoveMark(state: dict<any>, path: string)
-  if has_key(state.marked_paths, path)
-    remove(state.marked_paths, path)
-  endif
-enddef
-
 def ClearInvalidMarks(state: dict<any>)
   for path in copy(keys(state.marked_paths))
     if !PathExists(path)
       remove(state.marked_paths, path)
     endif
   endfor
-enddef
-
-def MarkCurrentPath(state: dict<any>)
-  var entry = CurrentEntry(state)
-  if empty(entry)
-    return
-  endif
-
-  state.marked_paths[entry.path] = true
-  Render()
 enddef
 
 def EnsureParentDir(path: string)
@@ -1524,9 +1475,50 @@ def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
     OpenOrReuse(dir, reset_tree)
     return
   endif
-
   OpenEmptyWindow(command)
   OpenInCurrentBuffer(dir, reset_tree)
+enddef
+
+# API
+
+export def ResolvedViewIndent(): number
+  return ViewIndent()
+enddef
+
+export def ResolvedViewIcons(): dict<any>
+  return ViewIcons()
+enddef
+
+export def BufferDir(bufnr: number = bufnr('%')): string
+  if !has_key(state_by_bufnr, bufnr)
+    return ''
+  endif
+  return get(state_by_bufnr[bufnr], 'cwd', '')
+enddef
+
+export def JumpToFirstEntry()
+  cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
+enddef
+
+export def JumpToTop()
+  JumpToFirstEntry()
+enddef
+
+export def RefreshCurrentWindow()
+  var bufnr = bufnr('%')
+  if &filetype !=# 'filer' || !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+  Render()
+enddef
+
+export def RefreshResizedWindows()
+  if empty(state_by_bufnr)
+    return
+  endif
+  for winid in get(v:event, 'windows', [])
+    win_execute(winid, 'silent call filer#RefreshCurrentWindow()')
+  endfor
 enddef
 
 export def Open(dir_arg: string = '', command: string = '', reset_tree: bool = true)
@@ -1535,7 +1527,6 @@ export def Open(dir_arg: string = '', command: string = '', reset_tree: bool = t
     echoerr $'Not a directory: {dir}'
     return
   endif
-
   OpenFilerWithCommand(dir, ResolveLaunchCommand(command), reset_tree)
 enddef
 
@@ -1546,7 +1537,6 @@ export def OpenBufferDir(command: string = '')
     OpenFilerWithCommand(state.cwd, open_command, false)
     return
   endif
-
   var target = expand('%:p')
   var dir = expand('%:p:h')
   if empty(dir)
@@ -1575,16 +1565,13 @@ export def OpenCurrentEntry(command: string = '')
   if line('.') == HEADER_LINE
     entry = MakeEntry(ENTRY_DIR, state.cwd, state.cwd, 0)
   endif
-
   if empty(entry)
     return
   endif
-
   if entry.kind ==# ENTRY_FILE
     OpenFile(entry.path, command)
     return
   endif
-
   if entry.kind ==# ENTRY_DIR
     OpenFilerWithCommand(entry.path, ResolveDirectoryOpenCommand(command))
   endif
@@ -1595,12 +1582,10 @@ export def ToggleTree()
   if !empty(state.file_search_query)
     return
   endif
-
   var entry = CurrentEntry(state)
   if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
-
   state.expanded_dirs[entry.path] = !get(state.expanded_dirs, entry.path, false)
   Render()
 enddef
@@ -1610,12 +1595,10 @@ export def ExpandTreeRecursive()
   if !empty(state.file_search_query)
     return
   endif
-
   var entry = CurrentEntry(state)
   if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
-
   if get(state.expanded_dirs, entry.path, false)
     CollapseSubtreeRecursive(state, entry.path)
   else
@@ -1652,20 +1635,13 @@ export def ToggleMark()
   if empty(entry)
     return
   endif
-
-  var path = entry.path
-  var current_index = CurrentEntryIndex(state)
-  if empty(path)
-    return
-  endif
-
-  if IsMarked(state, path)
-    RemoveMark(state, path)
+  if IsMarked(state, entry)
+    RemoveMark(state, entry)
   else
-    state.marked_paths[path] = true
+    MarkEntry(state, entry)
   endif
   Render()
-  var next_line = EntryLine(current_index + 1)
+  var next_line = EntryLine(CurrentEntryIndex(state) + 1)
   var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
   cursor(target_line, 1)
 enddef
@@ -1711,21 +1687,18 @@ export def MarkAll()
   var state = EnsureState()
   var all_marked = true
   var has_markable_entry = false
-
   for entry in state.entries
     has_markable_entry = true
-    if !IsMarked(state, entry.path)
+    if !IsMarked(state, entry)
       all_marked = false
       break
     endif
   endfor
-
   if all_marked && has_markable_entry
     state.marked_paths = {}
     Render()
     return
   endif
-
   state.marked_paths = {}
   for entry in state.entries
     state.marked_paths[entry.path] = true
@@ -1739,20 +1712,17 @@ export def Create()
   if empty(raw)
     return
   endif
-
   var path = ResolvePath(state.cwd, raw)
   if PathExists(path)
     echoerr $'Already exists: {path}'
     return
   endif
-
   if raw =~ '[\/]$'
     mkdir(path, 'p')
   else
     EnsureParentDir(path)
     writefile([], path)
   endif
-
   Render()
   JumpToPath(path)
 enddef
@@ -1763,8 +1733,8 @@ export def DeleteOrMark()
     DeleteMarked()
     return
   endif
-
-  MarkCurrentPath(state)
+  MarkCurrentEntry(state)
+  Render()
 enddef
 
 export def DeleteMarked()
@@ -1774,17 +1744,14 @@ export def DeleteMarked()
     echo 'No marked paths'
     return
   endif
-
   if !Confirm($'Delete {len(paths)} marked paths?')
     return
   endif
-
   for path in paths
     if PathExists(path)
       DeletePath(path)
     endif
   endfor
-
   state.marked_paths = {}
   Render()
 enddef
@@ -1796,8 +1763,8 @@ export def RenameOrMark()
     OpenRenameBuffer(state, paths)
     return
   endif
-
-  MarkCurrentPath(state)
+  MarkCurrentEntry(state)
+  Render()
 enddef
 
 export def CopyOrMark()
@@ -1807,8 +1774,8 @@ export def CopyOrMark()
     OpenCopyBuffer(state, paths)
     return
   endif
-
-  MarkCurrentPath(state)
+  MarkCurrentEntry(state)
+  Render()
 enddef
 
 export def ApplyRenameBuffer()
@@ -1816,18 +1783,15 @@ export def ApplyRenameBuffer()
   if !has_key(rename_state_by_bufnr, rename_bufnr)
     return
   endif
-
   var context = rename_state_by_bufnr[rename_bufnr]
   var destination_paths = CollectRenameDestinations(context)
   var renamed_paths = ApplyBulkRename(context.source_paths, destination_paths)
   setlocal nomodified
-
   var filer_bufnr = context.filer_bufnr
   if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
     echo $'Renamed {len(renamed_paths)} entries'
     return
   endif
-
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
   state.marked_paths = {}
@@ -1841,18 +1805,15 @@ export def ApplyCopyBuffer()
   if !has_key(copy_state_by_bufnr, copy_bufnr)
     return
   endif
-
   var context = copy_state_by_bufnr[copy_bufnr]
   var destination_paths = CollectCopyDestinations(context)
   var copied_paths = ApplyBulkCopy(context.source_paths, destination_paths)
   setlocal nomodified
-
   var filer_bufnr = context.filer_bufnr
   if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
     echo $'Copied {len(copied_paths)} entries'
     return
   endif
-
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
   state.marked_paths = {}
@@ -1867,7 +1828,6 @@ export def YankCurrentPathToClipboard()
   if empty(path)
     return
   endif
-
   setreg('+', path)
   echo $'Copied to clipboard: {path}'
 enddef
@@ -1899,17 +1859,14 @@ export def OpenWithDefaultApplication()
   if empty(path)
     return
   endif
-
   if IsBrokenLink(path)
     WarnBrokenLink(path)
     return
   endif
-
   if OpenPathWithDefaultApplication(path)
     echo $'Opening with default application: {path}'
     return
   endif
-
   var reason = GetLastOpenError()
   echoerr empty(reason)
     ? $'Failed to open with default application: {path}'
@@ -1920,11 +1877,9 @@ export def MaybeOpenDir(path: string)
   if &buftype !=# '' || &filetype ==# 'filer'
     return
   endif
-
   var dir = NormalizeDir(path)
   if empty(path) || !isdirectory(dir)
     return
   endif
-
   Open(dir)
 enddef
