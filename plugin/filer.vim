@@ -16,3 +16,8 @@ augroup filer_default_explorer
   autocmd!
   autocmd BufEnter * call filer#MaybeOpenDir(expand('<amatch>'))
 augroup END
+
+augroup filer_resize
+  autocmd!
+  autocmd WinResized * call filer#RefreshResizedWindows()
+augroup END

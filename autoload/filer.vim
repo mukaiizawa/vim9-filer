@@ -224,10 +224,6 @@ def EntryLine(entry_index: number): number
   return entry_index + FIRST_ENTRY_LINE
 enddef
 
-def Notify(message: string)
-  echo message
-enddef
-
 def SetLastOpenError(message: string)
   last_open_error = message
 enddef
@@ -1102,9 +1098,23 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   DoVisitDirAutocmd()
 enddef
 
-def RefreshState(state: dict<any>, cursor_path: string = '')
+export def RefreshCurrentWindow()
+  var bufnr = bufnr('%')
+  if &filetype !=# 'filer' || !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+
   Render()
-  JumpToPath(cursor_path)
+enddef
+
+export def RefreshResizedWindows()
+  if empty(state_by_bufnr)
+    return
+  endif
+
+  for winid in get(v:event, 'windows', [])
+    win_execute(winid, 'silent call filer#RefreshCurrentWindow()')
+  endfor
 enddef
 
 def RemoveMark(state: dict<any>, path: string)
@@ -1555,9 +1565,8 @@ enddef
 
 export def Refresh()
   var state = EnsureState()
-  var current_path = CurrentPath(state)
   ClearInvalidMarks(state)
-  RefreshState(state, current_path)
+  Render()
 enddef
 
 export def OpenCurrentEntry(command: string = '')
@@ -1593,7 +1602,7 @@ export def ToggleTree()
   endif
 
   state.expanded_dirs[entry.path] = !get(state.expanded_dirs, entry.path, false)
-  RefreshState(state, entry.path)
+  Render()
 enddef
 
 export def ExpandTreeRecursive()
@@ -1612,7 +1621,7 @@ export def ExpandTreeRecursive()
   else
     ExpandSubtreeRecursive(state, entry.path, {})
   endif
-  RefreshState(state, entry.path)
+  Render()
 enddef
 
 export def GoParent()
@@ -1655,7 +1664,7 @@ export def ToggleMark()
   else
     state.marked_paths[path] = true
   endif
-  RefreshState(state, path)
+  Render()
   var next_line = EntryLine(current_index + 1)
   var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
   cursor(target_line, 1)
@@ -1664,7 +1673,7 @@ enddef
 export def ClearMarks()
   var state = EnsureState()
   state.marked_paths = {}
-  RefreshState(state, CurrentPath(state))
+  Render()
 enddef
 
 export def ClearMarksForCurrentBuffer()
@@ -1713,7 +1722,7 @@ export def MarkAll()
 
   if all_marked && has_markable_entry
     state.marked_paths = {}
-    RefreshState(state, CurrentPath(state))
+    Render()
     return
   endif
 
@@ -1721,7 +1730,7 @@ export def MarkAll()
   for entry in state.entries
     state.marked_paths[entry.path] = true
   endfor
-  RefreshState(state, CurrentPath(state))
+  Render()
 enddef
 
 export def Create()
@@ -1744,23 +1753,8 @@ export def Create()
     writefile([], path)
   endif
 
-  RefreshState(state, path)
-enddef
-
-export def DeleteCurrent()
-  var state = EnsureState()
-  var path = CurrentPath(state)
-  if empty(path)
-    return
-  endif
-
-  if !Confirm($'Delete {path}?')
-    return
-  endif
-
-  DeletePath(path)
-  RemoveMark(state, path)
-  RefreshState(state, ParentDir(path))
+  Render()
+  JumpToPath(path)
 enddef
 
 export def DeleteOrMark()
@@ -1777,7 +1771,7 @@ export def DeleteMarked()
   var state = EnsureState()
   var paths = sort(keys(state.marked_paths))
   if len(paths) == 0
-    Notify('No marked paths')
+    echo 'No marked paths'
     return
   endif
 
@@ -1792,7 +1786,7 @@ export def DeleteMarked()
   endfor
 
   state.marked_paths = {}
-  RefreshState(state, state.cwd)
+  Render()
 enddef
 
 export def RenameOrMark()
@@ -1830,14 +1824,15 @@ export def ApplyRenameBuffer()
 
   var filer_bufnr = context.filer_bufnr
   if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
-    Notify($'Renamed {len(renamed_paths)} entries')
+    echo $'Renamed {len(renamed_paths)} entries'
     return
   endif
 
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
   state.marked_paths = {}
-  RefreshState(state, len(renamed_paths) > 0 ? renamed_paths[0] : state.cwd)
+  Render()
+  JumpToFirstEntry()
   execute 'bwipeout ' .. rename_bufnr
 enddef
 
@@ -1854,78 +1849,16 @@ export def ApplyCopyBuffer()
 
   var filer_bufnr = context.filer_bufnr
   if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
-    Notify($'Copied {len(copied_paths)} entries')
+    echo $'Copied {len(copied_paths)} entries'
     return
   endif
 
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
   state.marked_paths = {}
-  RefreshState(state, len(copied_paths) > 0 ? copied_paths[0] : state.cwd)
+  Render()
+  JumpToFirstEntry()
   execute 'bwipeout ' .. copy_bufnr
-enddef
-
-export def RenameCurrent()
-  var state = EnsureState()
-  var path = CurrentPath(state)
-  if empty(path)
-    return
-  endif
-
-  var new_name = Prompt('Rename to: ', Basename(path))
-  if empty(new_name) || new_name ==# Basename(path)
-    return
-  endif
-
-  var dest = JoinPath(ParentDir(path), new_name)
-  if PathExists(dest)
-    echoerr $'Already exists: {dest}'
-    return
-  endif
-
-  MovePath(path, dest)
-  if IsMarked(state, path)
-    RemoveMark(state, path)
-    state.marked_paths[dest] = true
-  endif
-  RefreshState(state, dest)
-enddef
-
-export def RenameMarked()
-  var state = EnsureState()
-  var paths = sort(keys(state.marked_paths))
-  if len(paths) == 0
-    Notify('No marked paths')
-    return
-  endif
-
-  var renamed: list<string> = []
-  for path in paths
-    if !PathExists(path)
-      continue
-    endif
-
-    var new_name = Prompt($'Rename {Basename(path)} to: ', Basename(path))
-    if empty(new_name) || new_name ==# Basename(path)
-      add(renamed, path)
-      continue
-    endif
-
-    var dest = JoinPath(ParentDir(path), new_name)
-    if PathExists(dest)
-      echoerr $'Already exists: {dest}'
-      continue
-    endif
-
-    MovePath(path, dest)
-    add(renamed, dest)
-  endfor
-
-  state.marked_paths = {}
-  for path in renamed
-    state.marked_paths[path] = true
-  endfor
-  RefreshState(state, len(renamed) > 0 ? renamed[0] : state.cwd)
 enddef
 
 export def YankCurrentPathToClipboard()
@@ -1936,15 +1869,15 @@ export def YankCurrentPathToClipboard()
   endif
 
   setreg('+', path)
-  Notify($'Copied to clipboard: {path}')
-  RefreshState(state, path)
+  echo $'Copied to clipboard: {path}'
 enddef
 
 export def SearchFiles()
   var state = EnsureState()
   var query = Prompt('Search filename: ', state.file_search_query)
   state.file_search_query = query
-  RefreshState(state, state.cwd)
+  Render()
+  JumpToFirstEntry()
 enddef
 
 export def HandleCtrlF(): string
@@ -1956,7 +1889,8 @@ export def CycleSort()
   var state = EnsureState()
   var current_index = index(SORT_MODES, state.sort_mode)
   state.sort_mode = SORT_MODES[(current_index + 1) % len(SORT_MODES)]
-  RefreshState(state, CurrentPath(state))
+  Render()
+  JumpToFirstEntry()
 enddef
 
 export def OpenWithDefaultApplication()
@@ -1972,7 +1906,7 @@ export def OpenWithDefaultApplication()
   endif
 
   if OpenPathWithDefaultApplication(path)
-    Notify($'Opening with default application: {path}')
+    echo $'Opening with default application: {path}'
     return
   endif
 

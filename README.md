@@ -2,6 +2,8 @@
 
 A minimal file explorer implemented in Vim9 script.
 
+Requires Vim 9.0.0917 or later.
+
 This plugin intentionally disables netrw by setting `g:loaded_netrwPlugin`.
 It replaces Vim's default directory buffer handling with `filer`.
 
