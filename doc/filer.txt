@@ -335,7 +335,7 @@ g:filer_mappings
 		parent			<Plug>(filer-go-parent)
 		refresh			<Plug>(filer-refresh)
 		toggle_mark		<Plug>(filer-toggle-mark)
-		mark_all		<Plug>(filer-mark-all)
+		toggle_all_marks	<Plug>(filer-toggle-all-marks)
 		create			<Plug>(filer-create)
 		copy_or_mark		<Plug>(filer-copy-or-mark)
 		delete_or_mark		<Plug>(filer-delete-or-mark)

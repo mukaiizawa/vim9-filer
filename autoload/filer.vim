@@ -49,7 +49,7 @@ const FILER_MAPPING_SPECS = [
   {action: 'parent', lhs: 'h', plug: '<Plug>(filer-go-parent)', nowait: false},
   {action: 'refresh', lhs: '.', plug: '<Plug>(filer-refresh)', nowait: false},
   {action: 'toggle_mark', lhs: '<Space>', plug: '<Plug>(filer-toggle-mark)', nowait: true},
-  {action: 'mark_all', lhs: '*', plug: '<Plug>(filer-mark-all)', nowait: false},
+  {action: 'toggle_all_marks', lhs: '*', plug: '<Plug>(filer-toggle-all-marks)', nowait: false},
   {action: 'create', lhs: 'a', plug: '<Plug>(filer-create)', nowait: false},
   {action: 'copy_or_mark', lhs: 'c', plug: '<Plug>(filer-copy-or-mark)', nowait: false},
   {action: 'delete_or_mark', lhs: 'd', plug: '<Plug>(filer-delete-or-mark)', nowait: true},
@@ -596,7 +596,25 @@ def BuildEntries(state: dict<any>): list<dict<any>>
   return entries
 enddef
 
-# Mark API
+# Jump
+
+def JumpToPath(target_path: string)
+  var bufnr = bufnr('%')
+  if !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+  var target = NormalizePath(target_path)
+  var state = state_by_bufnr[bufnr]
+  for index in range(len(state.entries))
+    if state.entries[index].path ==# target
+      cursor(EntryLine(index), 1)
+      return
+    endif
+  endfor
+  JumpToFirstEntry()
+enddef
+
+# Mark
 
 def IsMarked(state: dict<any>, entry: dict<any>): bool
   if empty(entry)
@@ -618,6 +636,16 @@ enddef
 
 def MarkCount(state: dict<any>): number
   return len(keys(state.marked_paths))
+enddef
+
+def ClearAllMarks(state: dict<any>)
+  state.marked_paths = {}
+enddef
+
+def ClearAllMarksForBuffer(bufnr: number)
+  if has_key(state_by_bufnr, bufnr)
+    ClearAllMarks(state_by_bufnr[bufnr])
+  endif
 enddef
 
 def RemoveMark(state: dict<any>, entry: dict<any>)
@@ -949,24 +977,6 @@ def OpenPathWithDefaultApplication(target: string): bool
   return len(cmd) > 0 && StartJob(cmd)
 enddef
 
-def JumpToPath(target_path: string)
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-
-  var target = NormalizePath(target_path)
-  var state = state_by_bufnr[bufnr]
-  for index in range(len(state.entries))
-    if state.entries[index].path ==# target
-      cursor(EntryLine(index), 1)
-      return
-    endif
-  endfor
-
-  JumpToFirstEntry()
-enddef
-
 def Render()
   var bufnr = bufnr('%')
   if !has_key(state_by_bufnr, bufnr)
@@ -1018,7 +1028,7 @@ def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-go-parent) <Cmd>call filer#GoParent()<CR>
   nnoremap <silent><buffer> <Plug>(filer-refresh) <Cmd>call filer#ReopenCurrentDir()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-mark) <Cmd>call filer#ToggleMark()<CR>
-  nnoremap <silent><buffer> <Plug>(filer-mark-all) <Cmd>call filer#MarkAll()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-toggle-all-marks) <Cmd>call filer#ToggleAllMarks()<CR>
   nnoremap <silent><buffer> <Plug>(filer-create) <Cmd>call filer#Create()<CR>
   nnoremap <silent><buffer> <Plug>(filer-copy-or-mark) <Cmd>call filer#CopyOrMark()<CR>
   nnoremap <silent><buffer> <Plug>(filer-delete-or-mark) <Cmd>call filer#DeleteOrMark()<CR>
@@ -1060,7 +1070,7 @@ def SetupBuffer()
   augroup filer_buffer_lifecycle
     execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
     execute 'autocmd BufEnter <buffer=' .. current_bufnr .. '> doautocmd <nomodeline> User FilerVisitDir'
-    execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call filer#ClearMarksForCurrentBuffer()'
+    execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call ' .. expand('<SID>') .. 'ClearAllMarksForBuffer(' .. current_bufnr .. ')'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
   augroup END
 
@@ -1237,7 +1247,6 @@ enddef
 
 def OpenRenameBuffer(state: dict<any>, paths: list<string>)
   ValidateRenameSources(paths)
-
   var filer_bufnr = bufnr('%')
   enew
   var rename_bufnr = bufnr('%')
@@ -1247,7 +1256,6 @@ def OpenRenameBuffer(state: dict<any>, paths: list<string>)
     cwd: state.cwd,
     source_paths: copy(paths),
   })
-
   setline(1, paths)
   if line('$') > len(paths)
     deletebufline(rename_bufnr, len(paths) + 1, line('$'))
@@ -1266,7 +1274,6 @@ def OpenCopyBuffer(state: dict<any>, paths: list<string>)
     cwd: state.cwd,
     source_paths: copy(paths),
   })
-
   setline(1, paths)
   if line('$') > len(paths)
     deletebufline(copy_bufnr, len(paths) + 1, line('$'))
@@ -1481,6 +1488,10 @@ enddef
 
 # API
 
+export def JumpToFirstEntry()
+  cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
+enddef
+
 export def ResolvedViewIndent(): number
   return ViewIndent()
 enddef
@@ -1496,12 +1507,10 @@ export def BufferDir(bufnr: number = bufnr('%')): string
   return get(state_by_bufnr[bufnr], 'cwd', '')
 enddef
 
-export def JumpToFirstEntry()
-  cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
-enddef
-
-export def JumpToTop()
-  JumpToFirstEntry()
+export def Refresh()
+  var state = EnsureState()
+  ClearInvalidMarks(state)
+  Render()
 enddef
 
 export def RefreshCurrentWindow()
@@ -1553,12 +1562,6 @@ export def DuplicateBuffer(command: string = '')
   OpenFilerWithCommand(state.cwd, ResolveDuplicateCommand(command), false)
 enddef
 
-export def Refresh()
-  var state = EnsureState()
-  ClearInvalidMarks(state)
-  Render()
-enddef
-
 export def OpenCurrentEntry(command: string = '')
   var state = EnsureState()
   var entry = CurrentEntry(state)
@@ -1575,6 +1578,41 @@ export def OpenCurrentEntry(command: string = '')
   if entry.kind ==# ENTRY_DIR
     OpenFilerWithCommand(entry.path, ResolveDirectoryOpenCommand(command))
   endif
+enddef
+
+export def ToggleMark()
+  var state = EnsureState()
+  var entry = CurrentEntry(state)
+  if empty(entry)
+    return
+  endif
+  if IsMarked(state, entry)
+    RemoveMark(state, entry)
+  else
+    MarkEntry(state, entry)
+  endif
+  Render()
+  var next_line = EntryLine(CurrentEntryIndex(state) + 1)
+  var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
+  cursor(target_line, 1)
+enddef
+
+export def ToggleAllMarks()
+  var state = EnsureState()
+  var all_marked = true
+  for entry in state.entries
+    if !IsMarked(state, entry)
+      all_marked = false
+      break
+    endif
+  endfor
+  ClearAllMarks(state)
+  if !all_marked
+    for entry in state.entries
+      MarkEntry(state, entry)
+    endfor
+  endif
+  Render()
 enddef
 
 export def ToggleTree()
@@ -1629,38 +1667,6 @@ export def ReopenCurrentDir()
   OpenFilerWithCommand(current_dir, 'edit')
 enddef
 
-export def ToggleMark()
-  var state = EnsureState()
-  var entry = CurrentEntry(state)
-  if empty(entry)
-    return
-  endif
-  if IsMarked(state, entry)
-    RemoveMark(state, entry)
-  else
-    MarkEntry(state, entry)
-  endif
-  Render()
-  var next_line = EntryLine(CurrentEntryIndex(state) + 1)
-  var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
-  cursor(target_line, 1)
-enddef
-
-export def ClearMarks()
-  var state = EnsureState()
-  state.marked_paths = {}
-  Render()
-enddef
-
-export def ClearMarksForCurrentBuffer()
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-
-  state_by_bufnr[bufnr].marked_paths = {}
-enddef
-
 export def CleanupStateForCurrentBuffer()
   var bufnr = bufnr('%')
   if has_key(state_by_bufnr, bufnr)
@@ -1681,29 +1687,6 @@ export def CleanupCopyBufferForCurrentBuffer()
   if has_key(copy_state_by_bufnr, bufnr)
     remove(copy_state_by_bufnr, bufnr)
   endif
-enddef
-
-export def MarkAll()
-  var state = EnsureState()
-  var all_marked = true
-  var has_markable_entry = false
-  for entry in state.entries
-    has_markable_entry = true
-    if !IsMarked(state, entry)
-      all_marked = false
-      break
-    endif
-  endfor
-  if all_marked && has_markable_entry
-    state.marked_paths = {}
-    Render()
-    return
-  endif
-  state.marked_paths = {}
-  for entry in state.entries
-    state.marked_paths[entry.path] = true
-  endfor
-  Render()
 enddef
 
 export def Create()

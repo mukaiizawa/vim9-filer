@@ -170,7 +170,7 @@ g:filer_batch_mappings = {
 Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 `open_vsplit`, `open_tab`, `open_drop`, `duplicate`, `toggle_tree`,
 `toggle_tree_recursive`, `home`, `root`, `parent`, `refresh`, `toggle_mark`,
-`mark_all`, `create`, `copy_or_mark`, `delete_or_mark`, `first_entry`,
+`toggle_all_marks`, `create`, `copy_or_mark`, `delete_or_mark`, `first_entry`,
 `rename_or_mark`, `open_external`, `yank_path`, `search`, and `cycle_sort`.
 
 ## Notes
@@ -181,7 +181,7 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with the configured mark icon. The default is `*`.
-- Marks are cleared when changing directories or when the `filer` buffer is closed.
+- Marks are cleared when changing directories, when the `filer` buffer is hidden, or when it is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
 - The statusline shows the current directory on the left, and the sort mode plus `[current/total]` position on the right.
