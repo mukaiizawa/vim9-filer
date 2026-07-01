@@ -63,7 +63,7 @@ netrw.
 - `r`: Mark the item under the cursor when nothing is marked; otherwise open a batch rename buffer for all marked items.
 - `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
-- `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
+- `/`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Opening Customization
@@ -181,7 +181,7 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - When the window is too narrow to fit the metadata area, the entry falls back to showing only the name.
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with the configured mark icon. The default is `*`.
-- Marks are cleared when changing directories, when the `filer` buffer is hidden, or when it is closed.
+- Marks are cleared when changing directories, changing search, when the `filer` buffer is hidden, or when it is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
 - The statusline right-aligns active search, sort mode, entry/result count, and mark count.

@@ -165,12 +165,9 @@ yy		Copy the full path of the item under the cursor to the clipboard
 		register.
 		On the header line, copy the current filer directory.
 
-							*filer-CTRL-F*
-CTRL-F		Recursively search for file names under the current filer
+								*filer-slash*
+/		Recursively search for file names under the current filer
 		directory.  Submit an empty query to clear the search.
-
-		While a search is active, CTRL-F keeps its normal page-down
-		behavior.
 
 							*filer-S*
 S		Cycle the sort mode: "name" -> "size" -> "time".
@@ -383,8 +380,8 @@ MARKS							*filer-marks*
 Selected items are marked with the configured mark icon.  The default is "*".
 Marks are local to a filer buffer.
 
-Marks are cleared when changing directories, when the filer buffer is hidden,
-and when the filer buffer is closed.
+Marks are cleared when changing directories, changing search, when the filer
+buffer is hidden, and when the filer buffer is closed.
 
 The delete, rename, and copy mappings use marks as their selection.  If no item
 is marked, these mappings first mark the item under the cursor.
@@ -412,7 +409,7 @@ Use "q" in a batch buffer to wipe it out without applying changes.
 ==============================================================================
 SEARCH							*filer-search*
 
-Search mode is enabled with |filer-CTRL-F|.  It recursively scans file names
+Search mode is enabled with |filer-slash|.  It recursively scans file names
 under the current filer directory and displays matching entries as paths
 relative to that directory.
 

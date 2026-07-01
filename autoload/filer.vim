@@ -57,7 +57,7 @@ const FILER_MAPPING_SPECS = [
   {action: 'rename_or_mark', lhs: 'r', plug: '<Plug>(filer-rename-or-mark)', nowait: false},
   {action: 'open_external', lhs: 'x', plug: '<Plug>(filer-open-external)', nowait: false},
   {action: 'yank_path', lhs: 'yy', plug: '<Plug>(filer-yank-path)', nowait: false},
-  {action: 'search', lhs: '<C-F>', plug: '<Plug>(filer-search)', nowait: false},
+  {action: 'search', lhs: '/', plug: '<Plug>(filer-search)', nowait: true},
   {action: 'cycle_sort', lhs: 'S', plug: '<Plug>(filer-cycle-sort)', nowait: true},
 ]
 const BATCH_MAPPING_SPECS = [
@@ -644,7 +644,6 @@ def SearchTree(dir: string, root: string, state: dict<any>, entries: list<dict<a
     if stridx(tolower(name), tolower(state.file_search_query)) >= 0
       add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
     endif
-
     if IsDirectory(path)
       SearchTree(path, root, state, entries)
     endif
@@ -733,14 +732,12 @@ def DisplayName(state: dict<any>, entry: dict<any>): string
     ? icons.marked
     : repeat(' ', strdisplaywidth(icons.marked))
   var prefix = EntryDepthPrefix(entry.depth)
-
   if entry.kind ==# ENTRY_DIR
     var icon = get(state.expanded_dirs, entry.path, false) && empty(state.file_search_query)
       ? icons.opened
       : icons.closed
     return prefix .. mark .. icon .. ' ' .. entry.name .. '/'
   endif
-
   return prefix .. mark .. icons.leaf .. icons.file .. entry.name
 enddef
 
@@ -878,7 +875,6 @@ def StatuslineText(state: dict<any>): string
   if !empty(state.file_search_query)
     add(items, $'search:{substitute(state.file_search_query, "%", "%%", "g")}')
   endif
-
   var count_label = empty(state.file_search_query) ? 'entries' : 'results'
   add(items, $'sort:{state.sort_mode}')
   add(items, $'{count_label}:{len(state.entries)}')
@@ -886,7 +882,6 @@ def StatuslineText(state: dict<any>): string
   if mark_count > 0
     add(items, $'marks:{mark_count}')
   endif
-
   return '%=' .. join(items, ' ')
 enddef
 
@@ -1007,7 +1002,7 @@ def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-rename-or-mark) <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> <Plug>(filer-open-external) <Cmd>call filer#OpenWithDefaultApplication()<CR>
   nnoremap <silent><buffer> <Plug>(filer-yank-path) <Cmd>call filer#YankPathUnderCursorToClipboard()<CR>
-  nnoremap <silent><buffer><expr> <Plug>(filer-search) filer#HandleCtrlF()
+  nnoremap <silent><buffer> <Plug>(filer-search) <Cmd>call filer#SearchFiles()<CR>
   nnoremap <silent><buffer> <Plug>(filer-cycle-sort) <Cmd>call filer#CycleSort()<CR>
 enddef
 
@@ -1714,15 +1709,11 @@ enddef
 
 export def SearchFiles()
   var state = EnsureState()
-  var query = Prompt('Search filename: ', state.file_search_query)
+  var query = Prompt('Search filename: ')
   state.file_search_query = query
+  ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
-enddef
-
-export def HandleCtrlF(): string
-  var state = EnsureState()
-  return empty(state.file_search_query) ? "\<Cmd>call filer#SearchFiles()\<CR>" : "\<C-F>"
 enddef
 
 export def CycleSort()
