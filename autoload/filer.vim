@@ -67,6 +67,34 @@ const BATCH_MAPPING_SPECS = [
   {action: 'close', lhs: 'q', plug: '<Plug>(filer-batch-close)', nowait: false},
 ]
 
+def SetLastOpenError(message: string)
+  last_open_error = message
+enddef
+
+def ClearLastOpenError()
+  last_open_error = ''
+enddef
+
+def GetLastOpenError(): string
+  return last_open_error
+enddef
+
+def Prompt(prompt: string, default_value: string = ''): string
+  return input(prompt, default_value)
+enddef
+
+def Confirm(message: string): bool
+  return confirm(message, "&Yes\n&No", 2) == 1
+enddef
+
+def IsWindows(): bool
+  return has('win32') || has('win64')
+enddef
+
+def IsMac(): bool
+  return has('mac') || has('macunix')
+enddef
+
 # config
 
 def NoDefaultMappings(): bool
@@ -195,41 +223,6 @@ enddef
 
 def ResolveDuplicateCommand(command: string = ''): string
   return ResolveOpenCommand(command, 'filer_duplicate_command', 'vsplit', FILER_OPEN_COMMANDS)
-enddef
-
-def DisplayDir(path: string): string
-  if empty(path) || IsRootPath(path)
-    return path
-  endif
-  return path .. '/'
-enddef
-
-def SetLastOpenError(message: string)
-  last_open_error = message
-enddef
-
-def ClearLastOpenError()
-  last_open_error = ''
-enddef
-
-def GetLastOpenError(): string
-  return last_open_error
-enddef
-
-def Prompt(prompt: string, default_value: string = ''): string
-  return input(prompt, default_value)
-enddef
-
-def Confirm(message: string): bool
-  return confirm(message, "&Yes\n&No", 2) == 1
-enddef
-
-def IsWindows(): bool
-  return has('win32') || has('win64')
-enddef
-
-def IsMac(): bool
-  return has('mac') || has('macunix')
 enddef
 
 def DoVisitDirAutocmd()
@@ -469,6 +462,31 @@ def EnsureParentDir(path: string)
   endif
 enddef
 
+def CopyFile(source: string, destination: string)
+  writefile(readfile(source, 'b'), destination, 'b')
+enddef
+
+def CopyDirectory(source: string, destination: string)
+  mkdir(destination, 'p')
+  for name in SafeReadDir(source)
+    var child_source = JoinPath(source, name)
+    var child_destination = JoinPath(destination, name)
+    CopyPath(child_source, child_destination)
+  endfor
+enddef
+
+def CopyPath(source: string, destination: string)
+  if PathExists(destination)
+    DeletePath(destination)
+  endif
+  EnsureParentDir(destination)
+  if IsDirectory(source)
+    CopyDirectory(source, destination)
+    return
+  endif
+  CopyFile(source, destination)
+enddef
+
 def DeletePath(path: string)
   if IsDirectory(path)
     delete(path, 'rf')
@@ -608,39 +626,25 @@ def EnsureState(): dict<any>
   return state_by_bufnr[bufnr]
 enddef
 
-def AddTreeEntries(entries: list<dict<any>>, dir: string, depth: number, state: dict<any>)
-  for name in SortedChildren(dir, state.sort_mode)
-    var path = JoinPath(dir, name)
-    var entry = MakeFilesystemEntry(name, path, depth)
-    add(entries, entry)
-    if entry.kind ==# ENTRY_DIR && get(state.expanded_dirs, path, false)
-      AddTreeEntries(entries, path, depth + 1, state)
-    endif
-  endfor
-enddef
+# jump
 
-def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
-  var dir_key = PathKey(dir)
-  if has_key(visited, dir_key)
+def JumpToPath(target_path: string)
+  var bufnr = bufnr('%')
+  if !has_key(state_by_bufnr, bufnr)
     return
   endif
-  visited[dir_key] = true
-  state.expanded_dirs[dir] = true
-  for name in SafeReadDir(dir)
-    var path = JoinPath(dir, name)
-    if IsDirectory(path)
-      ExpandSubtreeRecursive(state, path, visited)
+  var target = NormalizePath(target_path)
+  var state = state_by_bufnr[bufnr]
+  for index in range(len(state.entries))
+    if state.entries[index].path ==# target
+      cursor(FIRST_ENTRY_LINE + index, 1)
+      return
     endif
   endfor
+  JumpToFirstEntry()
 enddef
 
-def CollapseSubtreeRecursive(state: dict<any>, dir: string)
-  for path in copy(keys(state.expanded_dirs))
-    if path !=# state.cwd && IsSameOrChildPath(dir, path)
-      remove(state.expanded_dirs, path)
-    endif
-  endfor
-enddef
+# search
 
 def SearchCasePrefix(query: string): string
   if &ignorecase && (!&smartcase || query !~# '\u')
@@ -673,44 +677,80 @@ def SearchNameMatches(name: string, pattern: string): bool
   endtry
 enddef
 
-def SearchTree(dir: string, root: string, state: dict<any>, pattern: string, entries: list<dict<any>>)
-  for name in SortedChildren(dir, state.sort_mode)
-    var path = JoinPath(dir, name)
-    if SearchNameMatches(name, pattern)
-      add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
-    endif
-    if IsDirectory(path)
-      SearchTree(path, root, state, pattern, entries)
-    endif
-  endfor
-enddef
+# tree
 
-def BuildEntries(state: dict<any>): list<dict<any>>
-  var entries: list<dict<any>> = []
-  if empty(state.file_search_query)
-    AddTreeEntries(entries, state.cwd, 0, state)
-  else
-    SearchTree(state.cwd, state.cwd, state, SearchPattern(state.file_search_query), entries)
-  endif
-  return entries
-enddef
-
-# Jump
-
-def JumpToPath(target_path: string)
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
+def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
+  var dir_key = PathKey(dir)
+  if has_key(visited, dir_key)
     return
   endif
-  var target = NormalizePath(target_path)
-  var state = state_by_bufnr[bufnr]
-  for index in range(len(state.entries))
-    if state.entries[index].path ==# target
-      cursor(FIRST_ENTRY_LINE + index, 1)
-      return
+  visited[dir_key] = true
+  state.expanded_dirs[dir] = true
+  for name in SafeReadDir(dir)
+    var path = JoinPath(dir, name)
+    if IsDirectory(path)
+      ExpandSubtreeRecursive(state, path, visited)
     endif
   endfor
-  JumpToFirstEntry()
+enddef
+
+def CollapseSubtreeRecursive(state: dict<any>, dir: string)
+  for path in copy(keys(state.expanded_dirs))
+    if path !=# state.cwd && IsSameOrChildPath(dir, path)
+      remove(state.expanded_dirs, path)
+    endif
+  endfor
+enddef
+
+# external open
+
+def PowerShellCommand(script: string): list<string>
+  return ['powershell', '-NoProfile', '-Command', script]
+enddef
+
+def SingleQuoteForPowerShell(path: string): string
+  return "'" .. substitute(path, "'", "''", 'g') .. "'"
+enddef
+
+def WindowsOpenFileCommand(normalized: string): list<string>
+  var native = NativePath(normalized)
+  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
+  return PowerShellCommand(ps)
+enddef
+
+def WindowsOpenDirectoryCommand(normalized: string): list<string>
+  var native = NativePath(normalized)
+  var argument = '/n,"' .. native .. '"'
+  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell(argument)
+  return PowerShellCommand(ps)
+enddef
+
+def OpenCommandForDefaultApplication(normalized: string): list<string>
+  if IsWindows()
+    return IsDirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
+  endif
+  if IsMac()
+    return ['open', normalized]
+  endif
+  if executable('xdg-open') != 1
+    SetLastOpenError('xdg-open is unavailable')
+    return []
+  endif
+  return ['xdg-open', normalized]
+enddef
+
+def OpenPathWithDefaultApplication(target: string): bool
+  var normalized = NormalizePath(target)
+  if empty(normalized)
+    SetLastOpenError('empty target path')
+    return false
+  endif
+  if !PathExists(normalized)
+    SetLastOpenError($'target path does not exist: {normalized}')
+    return false
+  endif
+  var cmd = OpenCommandForDefaultApplication(normalized)
+  return len(cmd) > 0 && StartJob(cmd)
 enddef
 
 # Mark
@@ -761,6 +801,15 @@ def RemoveMark(state: dict<any>, entry: dict<any>)
   endif
 enddef
 
+# view
+
+def DisplayDir(path: string): string
+  if empty(path) || IsRootPath(path)
+    return path
+  endif
+  return path .. '/'
+enddef
+
 def DisplayName(state: dict<any>, entry: dict<any>): string
   var icons = ResolvedViewIcons()
   var mark = IsMarked(state, entry)
@@ -807,6 +856,473 @@ def TruncateDisplayText(text: string, max_width: number, marker: string = '...')
   endfor
   return head .. marker
 enddef
+
+def EntryTruncationMarker(entry: dict<any>): string
+  return entry.kind ==# ENTRY_DIR ? '.../' : '...'
+enddef
+
+def FormatEntryLineParts(state: dict<any>, entry: dict<any>, width: number): dict<any>
+  var name = DisplayName(state, entry)
+  var size = EntrySize(entry)
+  var timestamp = EntryTimestamp(entry)
+  var meta = size .. ' ' .. timestamp
+  if width <= META_RESERVED_WIDTH + 1
+    var text = TruncateDisplayText(name, width, EntryTruncationMarker(entry))
+    return {line: text, searchable_text: text}
+  endif
+  var name_width = width - META_RESERVED_WIDTH - 1
+  var left = TruncateDisplayText(name, name_width, EntryTruncationMarker(entry))
+  return {
+    line: left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta,
+    searchable_text: left,
+  }
+enddef
+
+def TargetPathUnderCursor(state: dict<any>): string
+  var entry = EntryUnderCursor(state)
+  if empty(entry)
+    return state.cwd
+  endif
+  return entry.path
+enddef
+
+# bulk copy, bulk rename
+
+def CollectCopyDestinations(context: dict<any>): list<string>
+  var source_paths = context.source_paths
+  var lines = getline(1, '$')
+  if len(lines) != len(source_paths)
+    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
+  endif
+  var destinations: list<string> = []
+  for line_text in lines
+    if empty(line_text)
+      throw 'Copy destination cannot be empty'
+    endif
+    add(destinations, ResolvePath(context.cwd, line_text))
+  endfor
+  return destinations
+enddef
+
+def CollectRenameDestinations(context: dict<any>): list<string>
+  var source_paths = context.source_paths
+  var lines = getline(1, '$')
+  if len(lines) != len(source_paths)
+    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
+  endif
+  var destinations: list<string> = []
+  for line_text in lines
+    if empty(line_text)
+      throw 'Rename destination cannot be empty'
+    endif
+    add(destinations, ResolvePath(context.cwd, line_text))
+  endfor
+  return destinations
+enddef
+
+def MakeTemporaryMovePath(path: string): string
+  var candidate = path .. '.filer-tmp'
+  var suffix = 2
+  while PathExists(candidate)
+    candidate = $'{path}.filer-tmp.{suffix}'
+    suffix += 1
+  endwhile
+  return candidate
+enddef
+
+def ValidateRenameSources(paths: list<string>)
+  for i in range(len(paths))
+    for j in range(i + 1, len(paths) - 1)
+      if IsSameOrChildPath(paths[i], paths[j]) || IsSameOrChildPath(paths[j], paths[i])
+        throw $'Cannot batch rename nested paths at the same time: {paths[i]} / {paths[j]}'
+      endif
+    endfor
+  endfor
+enddef
+
+def ApplyBulkCopy(source_paths: list<string>, destination_paths: list<string>): list<string>
+  var copied_paths: list<string> = []
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    if PathKey(source) ==# PathKey(destination) && source ==# destination
+      continue
+    endif
+    if !PathExists(source)
+      throw $'Source does not exist: {source}'
+    endif
+    if IsSameOrChildPath(destination, source)
+      throw $'Copy destination overlaps source and would remove it: {destination}'
+    endif
+    if IsDirectory(source) && IsSameOrChildPath(source, destination)
+      throw $'Cannot copy a directory into itself: {source} -> {destination}'
+    endif
+    CopyPath(source, destination)
+    add(copied_paths, destination)
+  endfor
+  return copied_paths
+enddef
+
+def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>): list<string>
+  var source_set: dict<bool> = {}
+  var destination_set: dict<bool> = {}
+  var staged_moves: list<dict<any>> = []
+  var final_moves: list<dict<any>> = []
+  var renamed_paths: list<string> = []
+  for path in source_paths
+    source_set[PathKey(path)] = true
+  endfor
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    var source_key = PathKey(source)
+    var destination_key = PathKey(destination)
+    if has_key(destination_set, destination_key)
+      throw $'Duplicate destination: {destination}'
+    endif
+    destination_set[destination_key] = true
+    if source_key ==# destination_key && source ==# destination
+      add(renamed_paths, source)
+      continue
+    endif
+    if PathExists(destination) && !has_key(source_set, destination_key)
+      throw $'Destination already exists: {destination}'
+    endif
+  endfor
+  for index in range(len(source_paths))
+    var source = source_paths[index]
+    var destination = destination_paths[index]
+    var source_key = PathKey(source)
+    var destination_key = PathKey(destination)
+    if source_key ==# destination_key && source ==# destination
+      continue
+    endif
+    if source_key ==# destination_key || has_key(source_set, destination_key)
+      var temp_path = MakeTemporaryMovePath(source)
+      MovePath(source, temp_path)
+      add(staged_moves, {
+        temp_path: temp_path,
+        destination: destination,
+      })
+      add(renamed_paths, destination)
+      continue
+    endif
+    add(final_moves, {
+      source: source,
+      destination: destination,
+    })
+    add(renamed_paths, destination)
+  endfor
+  for move in final_moves
+    EnsureParentDir(move.destination)
+    MovePath(move.source, move.destination)
+  endfor
+  for move in staged_moves
+    EnsureParentDir(move.destination)
+    MovePath(move.temp_path, move.destination)
+  endfor
+  return renamed_paths
+enddef
+
+# buffer lifecycle and opening
+
+def SetupBuffer()
+  var current_bufnr = bufnr('%')
+  setlocal buftype=nofile
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal nowrap
+  setlocal nonumber
+  setlocal norelativenumber
+  setlocal foldcolumn=0
+  setlocal signcolumn=no
+  setlocal nomodifiable
+  setlocal filetype=filer
+  setlocal syntax=filer
+  setlocal laststatus=2
+  augroup filer_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufEnter <buffer=' .. current_bufnr .. '> doautocmd <nomodeline> User FilerVisitDir'
+    execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call ' .. expand('<SID>') .. 'ClearAllMarksForBuffer(' .. current_bufnr .. ')'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
+  augroup END
+  DefineFilerPlugMappings()
+  ApplyFilerDefaultMappings()
+enddef
+
+def OpenFile(path: string, command: string = ''): bool
+  if IsBrokenLink(path)
+    WarnBrokenLink(path)
+    return false
+  endif
+  execute ResolveFileOpenCommand(command) .. ' ' .. fnameescape(path)
+  return true
+enddef
+
+def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
+  var previous_dir = state.cwd
+  state.cwd = NormalizeDir(dir)
+  if !empty(previous_dir) && previous_dir !=# state.cwd
+    state.file_search_query = ''
+    ClearAllMarks(state)
+  endif
+  if reset_tree
+    state.expanded_dirs = {}
+    state.expanded_dirs[state.cwd] = true
+  else
+    state.expanded_dirs[state.cwd] = true
+  endif
+  DoVisitDirAutocmd()
+enddef
+
+def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
+  var current_bufnr = bufnr('%')
+  execute 'file ' .. fnameescape(MakeBufferName(dir, current_bufnr))
+  SetupBuffer()
+  var bufnr = bufnr('%')
+  var prev = has_key(state_by_bufnr, bufnr) ? state_by_bufnr[bufnr] : MakeState(dir)
+  state_by_bufnr[bufnr] = prev
+  SetCwd(prev, dir, reset_tree)
+  ClearInvalidMarks(prev)
+  Render()
+  JumpToFirstEntry()
+enddef
+
+def OpenOrReuse(dir: string, reset_tree: bool = true)
+  var current_bufnr = bufnr('%')
+  if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
+    enew
+  endif
+  OpenInCurrentBuffer(dir, reset_tree)
+enddef
+
+def OpenEmptyWindow(command: string)
+  if command ==# 'split'
+    new
+  elseif command ==# 'vsplit'
+    vnew
+  elseif command ==# 'tabedit'
+    tabnew
+  endif
+enddef
+
+def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
+  if command ==# 'edit'
+    OpenOrReuse(dir, reset_tree)
+    return
+  endif
+  OpenEmptyWindow(command)
+  OpenInCurrentBuffer(dir, reset_tree)
+enddef
+
+def SetupRenameBuffer(context: dict<any>)
+  var current_bufnr = bufnr('%')
+  rename_state_by_bufnr[current_bufnr] = context
+  setlocal buftype=acwrite
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal nowrap
+  setlocal filetype=filer_rename
+  setlocal syntax=
+  augroup filer_rename_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyRenameBuffer()'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
+  augroup END
+  DefineBatchPlugMappings()
+  ApplyBatchDefaultMappings()
+enddef
+
+def SetupCopyBuffer(context: dict<any>)
+  var current_bufnr = bufnr('%')
+  copy_state_by_bufnr[current_bufnr] = context
+  setlocal buftype=acwrite
+  setlocal bufhidden=hide
+  setlocal noswapfile
+  setlocal nowrap
+  setlocal filetype=filer_copy
+  setlocal syntax=
+  augroup filer_copy_buffer_lifecycle
+    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
+    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyCopyBuffer()'
+    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
+  augroup END
+  DefineBatchPlugMappings()
+  ApplyBatchDefaultMappings()
+enddef
+
+def CanonicalizeBufferName(name: string): string
+  var canonical = NormalizeSeparators(name)
+  return IsWindows() ? tolower(canonical) : canonical
+enddef
+
+def BufferNameInUse(name: string, current_bufnr: number): bool
+  var target = CanonicalizeBufferName(name)
+  for info in getbufinfo()
+    if info.bufnr != current_bufnr && CanonicalizeBufferName(bufname(info.bufnr)) ==# target
+      return true
+    endif
+  endfor
+  return false
+enddef
+
+def MakeUniqueBufferName(base: string, current_bufnr: number): string
+  if !BufferNameInUse(base, current_bufnr)
+    return base
+  endif
+  var suffix = 2
+  var candidate = $'{base} ({suffix})'
+  while BufferNameInUse(candidate, current_bufnr)
+    suffix += 1
+    candidate = $'{base} ({suffix})'
+  endwhile
+  return candidate
+enddef
+
+def MakeBufferName(dir: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer] ' .. dir, current_bufnr)
+enddef
+
+def MakeRenameBufferName(cwd: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer-rename] ' .. cwd, current_bufnr)
+enddef
+
+def MakeCopyBufferName(cwd: string, current_bufnr: number): string
+  return MakeUniqueBufferName('[filer-copy] ' .. cwd, current_bufnr)
+enddef
+
+def OpenRenameBuffer(state: dict<any>, paths: list<string>)
+  ValidateRenameSources(paths)
+  var filer_bufnr = bufnr('%')
+  enew
+  var rename_bufnr = bufnr('%')
+  execute 'file ' .. fnameescape(MakeRenameBufferName(state.cwd, rename_bufnr))
+  SetupRenameBuffer({
+    filer_bufnr: filer_bufnr,
+    cwd: state.cwd,
+    source_paths: copy(paths),
+  })
+  setline(1, paths)
+  if line('$') > len(paths)
+    deletebufline(rename_bufnr, len(paths) + 1, line('$'))
+  endif
+  setlocal nomodified
+  cursor(1, 1)
+enddef
+
+def OpenCopyBuffer(state: dict<any>, paths: list<string>)
+  var filer_bufnr = bufnr('%')
+  enew
+  var copy_bufnr = bufnr('%')
+  execute 'file ' .. fnameescape(MakeCopyBufferName(state.cwd, copy_bufnr))
+  SetupCopyBuffer({
+    filer_bufnr: filer_bufnr,
+    cwd: state.cwd,
+    source_paths: copy(paths),
+  })
+  setline(1, paths)
+  if line('$') > len(paths)
+    deletebufline(copy_bufnr, len(paths) + 1, line('$'))
+  endif
+  setlocal nomodified
+  cursor(1, 1)
+enddef
+
+# entries
+
+def AppendVisibleTreeEntries(entries: list<dict<any>>, dir: string, depth: number, state: dict<any>)
+  for name in SortedChildren(dir, state.sort_mode)
+    var path = JoinPath(dir, name)
+    var entry = MakeFilesystemEntry(name, path, depth)
+    add(entries, entry)
+    if entry.kind ==# ENTRY_DIR && get(state.expanded_dirs, path, false)
+      AppendVisibleTreeEntries(entries, path, depth + 1, state)
+    endif
+  endfor
+enddef
+
+def AppendSearchResultEntries(entries: list<dict<any>>, dir: string, root: string, state: dict<any>, pattern: string)
+  for name in SortedChildren(dir, state.sort_mode)
+    var path = JoinPath(dir, name)
+    if SearchNameMatches(name, pattern)
+      add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
+    endif
+    if IsDirectory(path)
+      AppendSearchResultEntries(entries, path, root, state, pattern)
+    endif
+  endfor
+enddef
+
+def BuildEntries(state: dict<any>): list<dict<any>>
+  var entries: list<dict<any>> = []
+  if empty(state.file_search_query)
+    AppendVisibleTreeEntries(entries, state.cwd, 0, state)
+  else
+    AppendSearchResultEntries(entries, state.cwd, state.cwd, state, SearchPattern(state.file_search_query))
+  endif
+  return entries
+enddef
+
+# rendering
+
+def StatuslineText(state: dict<any>): string
+  var items: list<string> = []
+  if !empty(state.file_search_query)
+    add(items, $'search:{substitute(state.file_search_query, "%", "%%", "g")}')
+  endif
+  var count_label = empty(state.file_search_query) ? 'entries' : 'results'
+  add(items, $'sort:{state.sort_mode}')
+  add(items, $'{count_label}:{len(state.entries)}')
+  var mark_count = len(MarkedPaths(state))
+  if mark_count > 0
+    add(items, $'marks:{mark_count}')
+  endif
+  return '%=' .. join(items, ' ')
+enddef
+
+def Render()
+  var bufnr = bufnr('%')
+  if !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+  var state = state_by_bufnr[bufnr]
+  var previous_last_lnum = line('$')
+  state.entries = BuildEntries(state)
+  var width = max([1, winwidth(0)])
+  var timestamp_highlights: list<dict<any>> = []
+  var search_highlights: list<dict<any>> = []
+  var search_pattern = SearchPattern(state.file_search_query)
+  var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
+  for index in range(len(state.entries))
+    var entry = state.entries[index]
+    var line_parts = FormatEntryLineParts(state, entry, width)
+    var line: string = line_parts.line
+    add(lines, line)
+    extend(search_highlights, SearchHighlightSpecs(line_parts.searchable_text, search_pattern, FIRST_ENTRY_LINE + index))
+    var timestamp = EntryTimestamp(entry)
+    if !HasVisibleTimestamp(line, timestamp)
+      continue
+    endif
+    add(timestamp_highlights, {
+      lnum: FIRST_ENTRY_LINE + index,
+      col: TimestampColumn(line, timestamp),
+      len: strlen(timestamp),
+      group: TimestampHighlightGroup(EntryMtime(entry)),
+    })
+  endfor
+  &l:modifiable = true
+  setbufline(bufnr, 1, lines)
+  if line('$') > len(lines)
+    deletebufline(bufnr, len(lines) + 1, line('$'))
+  endif
+  &l:modifiable = false
+  state.search_matches = search_highlights
+  ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
+  ApplySearchHighlights(bufnr, search_highlights)
+  &l:statusline = StatuslineText(state)
+enddef
+
+# highlight
 
 def TimestampHighlightGroup(mtime: number): string
   if mtime < 0
@@ -942,145 +1458,7 @@ def ApplySearchHighlights(bufnr: number, specs: list<dict<any>>)
   endfor
 enddef
 
-def EntryTruncationMarker(entry: dict<any>): string
-  return entry.kind ==# ENTRY_DIR ? '.../' : '...'
-enddef
-
-def FormatEntryLineParts(state: dict<any>, entry: dict<any>, width: number): dict<any>
-  var name = DisplayName(state, entry)
-  var size = EntrySize(entry)
-  var timestamp = EntryTimestamp(entry)
-  var meta = size .. ' ' .. timestamp
-  if width <= META_RESERVED_WIDTH + 1
-    var text = TruncateDisplayText(name, width, EntryTruncationMarker(entry))
-    return {line: text, searchable_text: text}
-  endif
-  var name_width = width - META_RESERVED_WIDTH - 1
-  var left = TruncateDisplayText(name, name_width, EntryTruncationMarker(entry))
-  return {
-    line: left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta,
-    searchable_text: left,
-  }
-enddef
-
-def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
-  return FormatEntryLineParts(state, entry, width).line
-enddef
-
-def StatuslineText(state: dict<any>): string
-  var items: list<string> = []
-  if !empty(state.file_search_query)
-    add(items, $'search:{substitute(state.file_search_query, "%", "%%", "g")}')
-  endif
-  var count_label = empty(state.file_search_query) ? 'entries' : 'results'
-  add(items, $'sort:{state.sort_mode}')
-  add(items, $'{count_label}:{len(state.entries)}')
-  var mark_count = len(MarkedPaths(state))
-  if mark_count > 0
-    add(items, $'marks:{mark_count}')
-  endif
-  return '%=' .. join(items, ' ')
-enddef
-
-def PathUnderCursor(state: dict<any>): string
-  var entry = EntryUnderCursor(state)
-  return empty(entry) ? '' : entry.path
-enddef
-
-def PathUnderCursorOrCwd(state: dict<any>): string
-  return line('.') == HEADER_LINE ? state.cwd : PathUnderCursor(state)
-enddef
-
-def SingleQuoteForPowerShell(path: string): string
-  return "'" .. substitute(path, "'", "''", 'g') .. "'"
-enddef
-
-def PowerShellCommand(script: string): list<string>
-  return ['powershell', '-NoProfile', '-Command', script]
-enddef
-
-def WindowsOpenDirectoryCommand(normalized: string): list<string>
-  var native = NativePath(normalized)
-  var argument = '/n,"' .. native .. '"'
-  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell(argument)
-  return PowerShellCommand(ps)
-enddef
-
-def WindowsOpenFileCommand(normalized: string): list<string>
-  var native = NativePath(normalized)
-  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
-  return PowerShellCommand(ps)
-enddef
-
-def OpenCommandForDefaultApplication(normalized: string): list<string>
-  if IsWindows()
-    return IsDirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
-  endif
-  if IsMac()
-    return ['open', normalized]
-  endif
-  if executable('xdg-open') != 1
-    SetLastOpenError('xdg-open is unavailable')
-    return []
-  endif
-  return ['xdg-open', normalized]
-enddef
-
-def OpenPathWithDefaultApplication(target: string): bool
-  var normalized = NormalizePath(target)
-  if empty(normalized)
-    SetLastOpenError('empty target path')
-    return false
-  endif
-  if !PathExists(normalized)
-    SetLastOpenError($'target path does not exist: {normalized}')
-    return false
-  endif
-  var cmd = OpenCommandForDefaultApplication(normalized)
-  return len(cmd) > 0 && StartJob(cmd)
-enddef
-
-def Render()
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-  var state = state_by_bufnr[bufnr]
-  var previous_last_lnum = line('$')
-  state.entries = BuildEntries(state)
-  var width = max([1, winwidth(0)])
-  var timestamp_highlights: list<dict<any>> = []
-  var search_highlights: list<dict<any>> = []
-  var search_pattern = SearchPattern(state.file_search_query)
-  var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
-  for index in range(len(state.entries))
-    var entry = state.entries[index]
-    var line_parts = FormatEntryLineParts(state, entry, width)
-    var line: string = line_parts.line
-    add(lines, line)
-    extend(search_highlights, SearchHighlightSpecs(line_parts.searchable_text, search_pattern, FIRST_ENTRY_LINE + index))
-    var timestamp = EntryTimestamp(entry)
-    if !HasVisibleTimestamp(line, timestamp)
-      continue
-    endif
-    add(timestamp_highlights, {
-      lnum: FIRST_ENTRY_LINE + index,
-      col: TimestampColumn(line, timestamp),
-      len: strlen(timestamp),
-      group: TimestampHighlightGroup(EntryMtime(entry)),
-    })
-  endfor
-  &l:modifiable = true
-  setbufline(bufnr, 1, lines)
-  if line('$') > len(lines)
-    deletebufline(bufnr, len(lines) + 1, line('$'))
-  endif
-  &l:modifiable = false
-  state.search_matches = search_highlights
-  ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
-  ApplySearchHighlights(bufnr, search_highlights)
-  &l:statusline = StatuslineText(state)
-enddef
+# mappings
 
 def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>close<CR>
@@ -1121,369 +1499,6 @@ enddef
 
 def ApplyBatchDefaultMappings()
   ApplyMappingSpecs(BATCH_MAPPING_SPECS, 'filer_batch_mappings')
-enddef
-
-def SetupBuffer()
-  var current_bufnr = bufnr('%')
-  setlocal buftype=nofile
-  setlocal bufhidden=hide
-  setlocal noswapfile
-  setlocal nowrap
-  setlocal nonumber
-  setlocal norelativenumber
-  setlocal foldcolumn=0
-  setlocal signcolumn=no
-  setlocal nomodifiable
-  setlocal filetype=filer
-  setlocal syntax=filer
-  setlocal laststatus=2
-  augroup filer_buffer_lifecycle
-    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
-    execute 'autocmd BufEnter <buffer=' .. current_bufnr .. '> doautocmd <nomodeline> User FilerVisitDir'
-    execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call ' .. expand('<SID>') .. 'ClearAllMarksForBuffer(' .. current_bufnr .. ')'
-    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
-  augroup END
-  DefineFilerPlugMappings()
-  ApplyFilerDefaultMappings()
-enddef
-
-def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
-  var previous_dir = state.cwd
-  state.cwd = NormalizeDir(dir)
-  if !empty(previous_dir) && previous_dir !=# state.cwd
-    state.file_search_query = ''
-    ClearAllMarks(state)
-  endif
-  if reset_tree
-    state.expanded_dirs = {}
-    state.expanded_dirs[state.cwd] = true
-  else
-    state.expanded_dirs[state.cwd] = true
-  endif
-  DoVisitDirAutocmd()
-enddef
-
-def OpenFile(path: string, command: string = ''): bool
-  if IsBrokenLink(path)
-    WarnBrokenLink(path)
-    return false
-  endif
-  execute ResolveFileOpenCommand(command) .. ' ' .. fnameescape(path)
-  return true
-enddef
-
-def CanonicalizeBufferName(name: string): string
-  var canonical = NormalizeSeparators(name)
-  return IsWindows() ? tolower(canonical) : canonical
-enddef
-
-def BufferNameInUse(name: string, current_bufnr: number): bool
-  var target = CanonicalizeBufferName(name)
-  for info in getbufinfo()
-    if info.bufnr != current_bufnr && CanonicalizeBufferName(bufname(info.bufnr)) ==# target
-      return true
-    endif
-  endfor
-  return false
-enddef
-
-def MakeUniqueBufferName(base: string, current_bufnr: number): string
-  if !BufferNameInUse(base, current_bufnr)
-    return base
-  endif
-  var suffix = 2
-  var candidate = $'{base} ({suffix})'
-  while BufferNameInUse(candidate, current_bufnr)
-    suffix += 1
-    candidate = $'{base} ({suffix})'
-  endwhile
-  return candidate
-enddef
-
-def MakeBufferName(dir: string, current_bufnr: number): string
-  return MakeUniqueBufferName('[filer] ' .. dir, current_bufnr)
-enddef
-
-def MakeRenameBufferName(cwd: string, current_bufnr: number): string
-  return MakeUniqueBufferName('[filer-rename] ' .. cwd, current_bufnr)
-enddef
-
-def MakeCopyBufferName(cwd: string, current_bufnr: number): string
-  return MakeUniqueBufferName('[filer-copy] ' .. cwd, current_bufnr)
-enddef
-
-def MakeTemporaryMovePath(path: string): string
-  var candidate = path .. '.filer-tmp'
-  var suffix = 2
-  while PathExists(candidate)
-    candidate = $'{path}.filer-tmp.{suffix}'
-    suffix += 1
-  endwhile
-  return candidate
-enddef
-
-def ValidateRenameSources(paths: list<string>)
-  for i in range(len(paths))
-    for j in range(i + 1, len(paths) - 1)
-      if IsSameOrChildPath(paths[i], paths[j]) || IsSameOrChildPath(paths[j], paths[i])
-        throw $'Cannot batch rename nested paths at the same time: {paths[i]} / {paths[j]}'
-      endif
-    endfor
-  endfor
-enddef
-
-def SetupRenameBuffer(context: dict<any>)
-  var current_bufnr = bufnr('%')
-  rename_state_by_bufnr[current_bufnr] = context
-  setlocal buftype=acwrite
-  setlocal bufhidden=hide
-  setlocal noswapfile
-  setlocal nowrap
-  setlocal filetype=filer_rename
-  setlocal syntax=
-  augroup filer_rename_buffer_lifecycle
-    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
-    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyRenameBuffer()'
-    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
-  augroup END
-  DefineBatchPlugMappings()
-  ApplyBatchDefaultMappings()
-enddef
-
-def SetupCopyBuffer(context: dict<any>)
-  var current_bufnr = bufnr('%')
-  copy_state_by_bufnr[current_bufnr] = context
-  setlocal buftype=acwrite
-  setlocal bufhidden=hide
-  setlocal noswapfile
-  setlocal nowrap
-  setlocal filetype=filer_copy
-  setlocal syntax=
-  augroup filer_copy_buffer_lifecycle
-    execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
-    execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyCopyBuffer()'
-    execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
-  augroup END
-  DefineBatchPlugMappings()
-  ApplyBatchDefaultMappings()
-enddef
-
-def OpenRenameBuffer(state: dict<any>, paths: list<string>)
-  ValidateRenameSources(paths)
-  var filer_bufnr = bufnr('%')
-  enew
-  var rename_bufnr = bufnr('%')
-  execute 'file ' .. fnameescape(MakeRenameBufferName(state.cwd, rename_bufnr))
-  SetupRenameBuffer({
-    filer_bufnr: filer_bufnr,
-    cwd: state.cwd,
-    source_paths: copy(paths),
-  })
-  setline(1, paths)
-  if line('$') > len(paths)
-    deletebufline(rename_bufnr, len(paths) + 1, line('$'))
-  endif
-  setlocal nomodified
-  cursor(1, 1)
-enddef
-
-def OpenCopyBuffer(state: dict<any>, paths: list<string>)
-  var filer_bufnr = bufnr('%')
-  enew
-  var copy_bufnr = bufnr('%')
-  execute 'file ' .. fnameescape(MakeCopyBufferName(state.cwd, copy_bufnr))
-  SetupCopyBuffer({
-    filer_bufnr: filer_bufnr,
-    cwd: state.cwd,
-    source_paths: copy(paths),
-  })
-  setline(1, paths)
-  if line('$') > len(paths)
-    deletebufline(copy_bufnr, len(paths) + 1, line('$'))
-  endif
-  setlocal nomodified
-  cursor(1, 1)
-enddef
-
-def CollectRenameDestinations(context: dict<any>): list<string>
-  var source_paths = context.source_paths
-  var lines = getline(1, '$')
-  if len(lines) != len(source_paths)
-    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
-  endif
-  var destinations: list<string> = []
-  for line_text in lines
-    if empty(line_text)
-      throw 'Rename destination cannot be empty'
-    endif
-    add(destinations, ResolvePath(context.cwd, line_text))
-  endfor
-  return destinations
-enddef
-
-def CollectCopyDestinations(context: dict<any>): list<string>
-  var source_paths = context.source_paths
-  var lines = getline(1, '$')
-  if len(lines) != len(source_paths)
-    throw $'Expected {len(source_paths)} lines, got {len(lines)}'
-  endif
-  var destinations: list<string> = []
-  for line_text in lines
-    if empty(line_text)
-      throw 'Copy destination cannot be empty'
-    endif
-    add(destinations, ResolvePath(context.cwd, line_text))
-  endfor
-  return destinations
-enddef
-
-def CopyFile(source: string, destination: string)
-  writefile(readfile(source, 'b'), destination, 'b')
-enddef
-
-def CopyDirectory(source: string, destination: string)
-  mkdir(destination, 'p')
-  for name in SafeReadDir(source)
-    var child_source = JoinPath(source, name)
-    var child_destination = JoinPath(destination, name)
-    CopyPath(child_source, child_destination)
-  endfor
-enddef
-
-def CopyPath(source: string, destination: string)
-  if PathExists(destination)
-    DeletePath(destination)
-  endif
-  EnsureParentDir(destination)
-  if IsDirectory(source)
-    CopyDirectory(source, destination)
-    return
-  endif
-  CopyFile(source, destination)
-enddef
-
-def ApplyBulkCopy(source_paths: list<string>, destination_paths: list<string>): list<string>
-  var copied_paths: list<string> = []
-  for index in range(len(source_paths))
-    var source = source_paths[index]
-    var destination = destination_paths[index]
-    if PathKey(source) ==# PathKey(destination) && source ==# destination
-      continue
-    endif
-    if !PathExists(source)
-      throw $'Source does not exist: {source}'
-    endif
-    if IsSameOrChildPath(destination, source)
-      throw $'Copy destination overlaps source and would remove it: {destination}'
-    endif
-    if IsDirectory(source) && IsSameOrChildPath(source, destination)
-      throw $'Cannot copy a directory into itself: {source} -> {destination}'
-    endif
-    CopyPath(source, destination)
-    add(copied_paths, destination)
-  endfor
-  return copied_paths
-enddef
-
-def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>): list<string>
-  var source_set: dict<bool> = {}
-  var destination_set: dict<bool> = {}
-  var staged_moves: list<dict<any>> = []
-  var final_moves: list<dict<any>> = []
-  var renamed_paths: list<string> = []
-  for path in source_paths
-    source_set[PathKey(path)] = true
-  endfor
-  for index in range(len(source_paths))
-    var source = source_paths[index]
-    var destination = destination_paths[index]
-    var source_key = PathKey(source)
-    var destination_key = PathKey(destination)
-    if has_key(destination_set, destination_key)
-      throw $'Duplicate destination: {destination}'
-    endif
-    destination_set[destination_key] = true
-    if source_key ==# destination_key && source ==# destination
-      add(renamed_paths, source)
-      continue
-    endif
-    if PathExists(destination) && !has_key(source_set, destination_key)
-      throw $'Destination already exists: {destination}'
-    endif
-  endfor
-  for index in range(len(source_paths))
-    var source = source_paths[index]
-    var destination = destination_paths[index]
-    var source_key = PathKey(source)
-    var destination_key = PathKey(destination)
-    if source_key ==# destination_key && source ==# destination
-      continue
-    endif
-    if source_key ==# destination_key || has_key(source_set, destination_key)
-      var temp_path = MakeTemporaryMovePath(source)
-      MovePath(source, temp_path)
-      add(staged_moves, {
-        temp_path: temp_path,
-        destination: destination,
-      })
-      add(renamed_paths, destination)
-      continue
-    endif
-    add(final_moves, {
-      source: source,
-      destination: destination,
-    })
-    add(renamed_paths, destination)
-  endfor
-  for move in final_moves
-    EnsureParentDir(move.destination)
-    MovePath(move.source, move.destination)
-  endfor
-  for move in staged_moves
-    EnsureParentDir(move.destination)
-    MovePath(move.temp_path, move.destination)
-  endfor
-  return renamed_paths
-enddef
-
-def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
-  var current_bufnr = bufnr('%')
-  execute 'file ' .. fnameescape(MakeBufferName(dir, current_bufnr))
-  SetupBuffer()
-  var bufnr = bufnr('%')
-  var prev = has_key(state_by_bufnr, bufnr) ? state_by_bufnr[bufnr] : MakeState(dir)
-  state_by_bufnr[bufnr] = prev
-  SetCwd(prev, dir, reset_tree)
-  ClearInvalidMarks(prev)
-  Render()
-  JumpToFirstEntry()
-enddef
-
-def OpenOrReuse(dir: string, reset_tree: bool = true)
-  var current_bufnr = bufnr('%')
-  if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
-    enew
-  endif
-  OpenInCurrentBuffer(dir, reset_tree)
-enddef
-
-def OpenEmptyWindow(command: string)
-  if command ==# 'split'
-    new
-  elseif command ==# 'vsplit'
-    vnew
-  elseif command ==# 'tabedit'
-    tabnew
-  endif
-enddef
-
-def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
-  if command ==# 'edit'
-    OpenOrReuse(dir, reset_tree)
-    return
-  endif
-  OpenEmptyWindow(command)
-  OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
 # API
@@ -1804,10 +1819,7 @@ enddef
 
 export def YankPathUnderCursorToClipboard()
   var state = EnsureState()
-  var path = PathUnderCursorOrCwd(state)
-  if empty(path)
-    return
-  endif
+  var path = TargetPathUnderCursor(state)
   setreg('+', path)
   echo $'Copied to clipboard: {path}'
 enddef
@@ -1917,10 +1929,7 @@ enddef
 
 export def OpenWithDefaultApplication()
   var state = EnsureState()
-  var path = PathUnderCursorOrCwd(state)
-  if empty(path)
-    return
-  endif
+  var path = TargetPathUnderCursor(state)
   if IsBrokenLink(path)
     WarnBrokenLink(path)
     return
