@@ -374,8 +374,8 @@ showing only the name.
 Symbolic links are shown as directories when their targets are directories.
 Broken symbolic links are reported when filer tries to open them.
 
-The statusline shows the current directory on the left, and the current sort
-mode plus "[current/total]" entry position on the right.
+The statusline right-aligns active search, sort mode, entry/result count, and
+mark count.
 
 ==============================================================================
 MARKS							*filer-marks*

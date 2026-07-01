@@ -184,7 +184,7 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - Marks are cleared when changing directories, when the `filer` buffer is hidden, or when it is closed.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
-- The statusline shows the current directory on the left, and the sort mode plus `[current/total]` position on the right.
+- The statusline right-aligns active search, sort mode, entry/result count, and mark count.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded. Timestamps are color-coded by recency, from cool tones for newer entries to warm tones for older entries.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.
 - Basic operation on Windows is supported within the same drive.

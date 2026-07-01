@@ -64,10 +64,6 @@ const BATCH_MAPPING_SPECS = [
   {action: 'close', lhs: 'q', plug: '<Plug>(filer-batch-close)', nowait: false},
 ]
 
-def EscapeStatusline(text: string): string
-  return substitute(text, '%', '%%', 'g')
-enddef
-
 # config
 
 def NoDefaultMappings(): bool
@@ -877,19 +873,21 @@ def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
 enddef
 
-def EntryPositionUnderCursor(state: dict<any>): number
-  var total = len(state.entries)
-  if total == 0
-    return 0
+def StatuslineText(state: dict<any>): string
+  var items: list<string> = []
+  if !empty(state.file_search_query)
+    add(items, $'search:{substitute(state.file_search_query, "%", "%%", "g")}')
   endif
-  return min([max([line('.') - HEADER_LINE, 1]), total])
-enddef
 
-def UpdateStatusline(state: dict<any>)
-  var total = len(state.entries)
-  var left = DisplayDir(state.cwd)
-  var right = $'{state.sort_mode} [{EntryPositionUnderCursor(state)}/{total}]'
-  &l:statusline = EscapeStatusline(left) .. '%=' .. EscapeStatusline(right)
+  var count_label = empty(state.file_search_query) ? 'entries' : 'results'
+  add(items, $'sort:{state.sort_mode}')
+  add(items, $'{count_label}:{len(state.entries)}')
+  var mark_count = len(MarkedPaths(state))
+  if mark_count > 0
+    add(items, $'marks:{mark_count}')
+  endif
+
+  return '%=' .. join(items, ' ')
 enddef
 
 def PathUnderCursor(state: dict<any>): string
@@ -983,7 +981,7 @@ def Render()
   endif
   &l:modifiable = false
   ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
-  UpdateStatusline(state)
+  &l:statusline = StatuslineText(state)
 enddef
 
 def DefineFilerPlugMappings()
