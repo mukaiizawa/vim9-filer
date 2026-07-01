@@ -616,13 +616,6 @@ enddef
 
 # Mark
 
-def IsMarked(state: dict<any>, entry: dict<any>): bool
-  if empty(entry)
-    return false
-  endif
-  return get(state.marked_paths, entry.path, false)
-enddef
-
 def MarkEntry(state: dict<any>, entry: dict<any>)
   if empty(entry)
     return
@@ -630,12 +623,27 @@ def MarkEntry(state: dict<any>, entry: dict<any>)
   state.marked_paths[entry.path] = true
 enddef
 
-def MarkCurrentEntry(state: dict<any>)
-  MarkEntry(state, CurrentEntry(state))
+def IsMarked(state: dict<any>, entry: dict<any>): bool
+  if empty(entry)
+    return false
+  endif
+  return get(state.marked_paths, entry.path, false)
 enddef
 
-def MarkCount(state: dict<any>): number
-  return len(keys(state.marked_paths))
+def HasMarks(state: dict<any>): bool
+  return !empty(state.marked_paths)
+enddef
+
+def MarkedPaths(state: dict<any>): list<string>
+  return sort(keys(state.marked_paths))
+enddef
+
+def ClearInvalidMarks(state: dict<any>)
+  for path in copy(keys(state.marked_paths))
+    if !PathExists(path)
+      remove(state.marked_paths, path)
+    endif
+  endfor
 enddef
 
 def ClearAllMarks(state: dict<any>)
@@ -1083,7 +1091,7 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   state.cwd = NormalizeDir(dir)
   if !empty(previous_dir) && previous_dir !=# state.cwd
     state.file_search_query = ''
-    state.marked_paths = {}
+    ClearAllMarks(state)
   endif
   if reset_tree
     state.expanded_dirs = {}
@@ -1092,14 +1100,6 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
     state.expanded_dirs[state.cwd] = true
   endif
   DoVisitDirAutocmd()
-enddef
-
-def ClearInvalidMarks(state: dict<any>)
-  for path in copy(keys(state.marked_paths))
-    if !PathExists(path)
-      remove(state.marked_paths, path)
-    endif
-  endfor
 enddef
 
 def EnsureParentDir(path: string)
@@ -1288,7 +1288,6 @@ def CollectRenameDestinations(context: dict<any>): list<string>
   if len(lines) != len(source_paths)
     throw $'Expected {len(source_paths)} lines, got {len(lines)}'
   endif
-
   var destinations: list<string> = []
   for line_text in lines
     if empty(line_text)
@@ -1712,17 +1711,17 @@ enddef
 
 export def DeleteOrMark()
   var state = EnsureState()
-  if MarkCount(state) > 0
+  if HasMarks(state)
     DeleteMarked()
     return
   endif
-  MarkCurrentEntry(state)
+  MarkEntry(state, CurrentEntry(state))
   Render()
 enddef
 
 export def DeleteMarked()
   var state = EnsureState()
-  var paths = sort(keys(state.marked_paths))
+  var paths = MarkedPaths(state)
   if len(paths) == 0
     echo 'No marked paths'
     return
@@ -1735,29 +1734,29 @@ export def DeleteMarked()
       DeletePath(path)
     endif
   endfor
-  state.marked_paths = {}
+  ClearAllMarks(state)
   Render()
 enddef
 
 export def RenameOrMark()
   var state = EnsureState()
-  var paths = sort(keys(state.marked_paths))
+  var paths = MarkedPaths(state)
   if len(paths) > 0
     OpenRenameBuffer(state, paths)
     return
   endif
-  MarkCurrentEntry(state)
+  MarkEntry(state, CurrentEntry(state))
   Render()
 enddef
 
 export def CopyOrMark()
   var state = EnsureState()
-  var paths = sort(keys(state.marked_paths))
+  var paths = MarkedPaths(state)
   if len(paths) > 0
     OpenCopyBuffer(state, paths)
     return
   endif
-  MarkCurrentEntry(state)
+  MarkEntry(state, CurrentEntry(state))
   Render()
 enddef
 
@@ -1777,7 +1776,7 @@ export def ApplyRenameBuffer()
   endif
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
-  state.marked_paths = {}
+  ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
   execute 'bwipeout ' .. rename_bufnr
@@ -1799,7 +1798,7 @@ export def ApplyCopyBuffer()
   endif
   execute 'buffer ' .. filer_bufnr
   var state = state_by_bufnr[filer_bufnr]
-  state.marked_paths = {}
+  ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
   execute 'bwipeout ' .. copy_bufnr
