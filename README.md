@@ -63,7 +63,8 @@ netrw.
 - `r`: Mark the item under the cursor when nothing is marked; otherwise open a batch rename buffer for all marked items.
 - `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
-- `/`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
+- `/`: Recursively search for file names under the current directory. Submit an empty query to clear the search. Matches are highlighted in the filer buffer without changing Vim's search pattern.
+- `n` / `N`: Move to the next/previous filer search result while search mode is active. When search mode is inactive, use Vim's normal search navigation.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Opening Customization
@@ -171,7 +172,8 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 `open_vsplit`, `open_tab`, `open_drop`, `duplicate`, `toggle_tree`,
 `toggle_tree_recursive`, `home`, `root`, `parent`, `refresh`, `toggle_mark`,
 `toggle_all_marks`, `create`, `copy_or_mark`, `delete_or_mark`, `first_entry`,
-`rename_or_mark`, `open_external`, `yank_path`, `search`, and `cycle_sort`.
+`rename_or_mark`, `open_external`, `yank_path`, `search`,
+`next_search_result`, `previous_search_result`, and `cycle_sort`.
 
 ## Notes
 

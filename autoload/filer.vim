@@ -6,6 +6,7 @@ var copy_state_by_bufnr: dict<any> = {}
 var last_open_error = ''
 var active_jobs: list<job> = []
 
+const SEARCH_HIGHLIGHT_PROP = 'FilerSearchMatch'
 const DEFAULT_TREE_INDENTATION = 2
 const DEFAULT_TREE_ICONS = {
   leaf: '|',
@@ -58,6 +59,8 @@ const FILER_MAPPING_SPECS = [
   {action: 'open_external', lhs: 'x', plug: '<Plug>(filer-open-external)', nowait: false},
   {action: 'yank_path', lhs: 'yy', plug: '<Plug>(filer-yank-path)', nowait: false},
   {action: 'search', lhs: '/', plug: '<Plug>(filer-search)', nowait: true},
+  {action: 'next_search_result', lhs: 'n', plug: '<Plug>(filer-next-search-result)', nowait: true},
+  {action: 'previous_search_result', lhs: 'N', plug: '<Plug>(filer-previous-search-result)', nowait: true},
   {action: 'cycle_sort', lhs: 'S', plug: '<Plug>(filer-cycle-sort)', nowait: true},
 ]
 const BATCH_MAPPING_SPECS = [
@@ -853,6 +856,57 @@ def ApplyTimestampHighlights(bufnr: number, specs: list<dict<any>>, last_lnum: n
   endfor
 enddef
 
+def EnsureSearchHighlightPropType(bufnr: number)
+  if !exists('*prop_type_add') || hlexists('Search') == 0
+    return
+  endif
+  try
+    prop_type_add(SEARCH_HIGHLIGHT_PROP, {bufnr: bufnr, highlight: 'Search'})
+  catch
+  endtry
+enddef
+
+def SearchHighlightSpecs(line: string, query: string, lnum: number): list<dict<any>>
+  var specs: list<dict<any>> = []
+  if empty(query)
+    return specs
+  endif
+  var text = tolower(line)
+  var pattern = tolower(query)
+  var start = 0
+  var length = strlen(pattern)
+  while true
+    var index = stridx(text, pattern, start)
+    if index < 0
+      break
+    endif
+    add(specs, {lnum: lnum, col: index + 1, len: strlen(query)})
+    start = index + length
+  endwhile
+  return specs
+enddef
+
+def AddSearchHighlight(bufnr: number, spec: dict<any>)
+  if !exists('*prop_add') || hlexists('Search') == 0
+    return
+  endif
+  try
+    prop_add(spec.lnum, spec.col, {
+      bufnr: bufnr,
+      length: spec.len,
+      type: SEARCH_HIGHLIGHT_PROP,
+    })
+  catch
+  endtry
+enddef
+
+def ApplySearchHighlights(bufnr: number, specs: list<dict<any>>)
+  EnsureSearchHighlightPropType(bufnr)
+  for spec in specs
+    AddSearchHighlight(bufnr, spec)
+  endfor
+enddef
+
 def EntryTruncationMarker(entry: dict<any>): string
   return entry.kind ==# ENTRY_DIR ? '.../' : '...'
 enddef
@@ -953,11 +1007,13 @@ def Render()
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
   var timestamp_highlights: list<dict<any>> = []
+  var search_highlights: list<dict<any>> = []
   var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
   for index in range(len(state.entries))
     var entry = state.entries[index]
     var line = FormatEntryLine(state, entry, width)
     add(lines, line)
+    extend(search_highlights, SearchHighlightSpecs(line, state.file_search_query, FIRST_ENTRY_LINE + index))
     var timestamp = EntryTimestamp(entry)
     if !HasVisibleTimestamp(line, timestamp)
       continue
@@ -976,6 +1032,7 @@ def Render()
   endif
   &l:modifiable = false
   ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
+  ApplySearchHighlights(bufnr, search_highlights)
   &l:statusline = StatuslineText(state)
 enddef
 
@@ -1003,6 +1060,8 @@ def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-open-external) <Cmd>call filer#OpenWithDefaultApplication()<CR>
   nnoremap <silent><buffer> <Plug>(filer-yank-path) <Cmd>call filer#YankPathUnderCursorToClipboard()<CR>
   nnoremap <silent><buffer> <Plug>(filer-search) <Cmd>call filer#SearchFiles()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-next-search-result) <Cmd>call filer#JumpSearchResult(1, v:count1)<CR>
+  nnoremap <silent><buffer> <Plug>(filer-previous-search-result) <Cmd>call filer#JumpSearchResult(-1, v:count1)<CR>
   nnoremap <silent><buffer> <Plug>(filer-cycle-sort) <Cmd>call filer#CycleSort()<CR>
 enddef
 
@@ -1714,6 +1773,33 @@ export def SearchFiles()
   ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
+enddef
+
+export def JumpSearchResult(direction: number, count: number = 1)
+  var state = EnsureState()
+  var key = direction > 0 ? 'n' : 'N'
+  var step_count = max([1, count])
+  if empty(state.file_search_query)
+    execute 'normal! ' .. step_count .. key
+    return
+  endif
+  var total = len(state.entries)
+  if total == 0
+    return
+  endif
+  var target = line('.') - FIRST_ENTRY_LINE
+  if target < 0 || target >= total
+    target = direction > 0 ? -1 : 0
+  endif
+  for _ in range(step_count)
+    target += direction > 0 ? 1 : -1
+    if target >= total
+      target = 0
+    elseif target < 0
+      target = total - 1
+    endif
+  endfor
+  cursor(FIRST_ENTRY_LINE + target, 1)
 enddef
 
 export def CycleSort()
