@@ -921,6 +921,27 @@ def TargetPathUnderCursor(state: dict<any>): string
   return entry.path
 enddef
 
+# delete
+
+def DeleteMarked()
+  var state = EnsureState()
+  if !HasMarks(state)
+    echo 'No marked paths'
+    return
+  endif
+  var paths = MarkedPaths(state)
+  if !Confirm($'Delete {len(paths)} marked paths?')
+    return
+  endif
+  for path in paths
+    if PathExists(path)
+      DeletePath(path)
+    endif
+  endfor
+  ClearAllMarks(state)
+  Render()
+enddef
+
 # bulk copy, bulk rename
 
 def CollectCopyDestinations(context: dict<any>): list<string>
@@ -1781,25 +1802,6 @@ export def DeleteOrMark()
     return
   endif
   MarkEntry(state, EntryUnderCursor(state))
-  Render()
-enddef
-
-export def DeleteMarked()
-  var state = EnsureState()
-  if !HasMarks(state)
-    echo 'No marked paths'
-    return
-  endif
-  var paths = MarkedPaths(state)
-  if !Confirm($'Delete {len(paths)} marked paths?')
-    return
-  endif
-  for path in paths
-    if PathExists(path)
-      DeletePath(path)
-    endif
-  endfor
-  ClearAllMarks(state)
   Render()
 enddef
 
