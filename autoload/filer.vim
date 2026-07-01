@@ -845,16 +845,12 @@ def DisplayDir(path: string): string
   return path .. '/'
 enddef
 
-def EntryDepthPrefix(depth: number): string
-  return repeat(' ', depth * ResolvedViewIndent())
-enddef
-
 def DisplayName(state: dict<any>, entry: dict<any>): string
-  var icons = ResolvedViewIcons()
+  var icons = ViewIcons()
   var mark = IsMarked(state, entry)
     ? icons.marked
     : repeat(' ', strdisplaywidth(icons.marked))
-  var prefix = EntryDepthPrefix(entry.depth)
+  var prefix = repeat(' ', entry.depth * ViewIndent())
   if entry.kind ==# ENTRY_DIR
     var icon = get(state.expanded_dirs, entry.path, false) && empty(state.file_search_query)
       ? icons.opened
@@ -1569,10 +1565,6 @@ enddef
 
 export def JumpToFirstEntry()
   cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
-enddef
-
-export def ResolvedViewIndent(): number
-  return ViewIndent()
 enddef
 
 export def ResolvedViewIcons(): dict<any>
