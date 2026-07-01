@@ -280,10 +280,6 @@ def NativePath(path: string): string
   return IsWindows() ? substitute(path, '/', '\\', 'g') : path
 enddef
 
-def Basename(path: string): string
-  return fnamemodify(path, ':t')
-enddef
-
 def NormalizeSeparators(path: string): string
   return substitute(path, '\\', '/', 'g')
 enddef
@@ -1520,12 +1516,6 @@ export def BufferDir(bufnr: number = bufnr('%')): string
     return ''
   endif
   return get(state_by_bufnr[bufnr], 'cwd', '')
-enddef
-
-export def Refresh()
-  var state = EnsureState()
-  ClearInvalidMarks(state)
-  Render()
 enddef
 
 export def RefreshCurrentWindow()
