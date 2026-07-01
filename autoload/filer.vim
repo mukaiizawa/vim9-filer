@@ -68,6 +68,8 @@ def EscapeStatusline(text: string): string
   return substitute(text, '%', '%%', 'g')
 enddef
 
+# config
+
 def NoDefaultMappings(): bool
   return get(g:, 'filer_no_default_mappings', false) ? true : false
 enddef
@@ -97,7 +99,6 @@ def ViewIcons(): dict<any>
   if type(configured_icons) != v:t_dict
     return icons
   endif
-
   for key in keys(icons)
     var value = get(configured_icons, key, icons[key])
     if type(value) == v:t_string && !empty(value)
@@ -170,7 +171,6 @@ def ResolveOpenCommand(command: string, config_var_name: string, default_command
   if index(allowed_commands, resolved) >= 0
     return resolved
   endif
-
   echoerr $'Invalid g:{config_var_name}: {resolved}. Expected one of: {join(allowed_commands, ", ")}'
   return default_command
 enddef
@@ -183,7 +183,6 @@ def ResolveDirectoryOpenCommand(command: string = ''): string
   if command ==# 'drop'
     return 'edit'
   endif
-
   return ResolveOpenCommand(command, 'filer_directory_open_command', 'edit', FILER_OPEN_COMMANDS)
 enddef
 
@@ -203,12 +202,7 @@ def DisplayDir(path: string): string
   if empty(path) || IsRootPath(path)
     return path
   endif
-
   return path .. '/'
-enddef
-
-def EntryLine(entry_index: number): number
-  return entry_index + FIRST_ENTRY_LINE
 enddef
 
 def SetLastOpenError(message: string)
@@ -223,20 +217,30 @@ def GetLastOpenError(): string
   return last_open_error
 enddef
 
-def CleanupFinishedJobs()
-  var jobs: list<job> = []
-  for current_job in active_jobs
-    if job_status(current_job) ==# 'run'
-      add(jobs, current_job)
-    endif
-  endfor
-  active_jobs = jobs
+def Prompt(prompt: string, default_value: string = ''): string
+  return input(prompt, default_value)
 enddef
 
-def TrackJob(current_job: job)
-  CleanupFinishedJobs()
-  add(active_jobs, current_job)
+def Confirm(message: string): bool
+  return confirm(message, "&Yes\n&No", 2) == 1
 enddef
+
+def IsWindows(): bool
+  return has('win32') || has('win64')
+enddef
+
+def IsMac(): bool
+  return has('mac') || has('macunix')
+enddef
+
+def DoVisitDirAutocmd()
+  if empty(BufferDir())
+    return
+  endif
+  doautocmd <nomodeline> User FilerVisitDir
+enddef
+
+# path and files
 
 def WarnBrokenLink(path: string)
   echohl WarningMsg
@@ -250,131 +254,9 @@ def WarnUnreadableDir(path: string)
   echohl None
 enddef
 
-def IsWindows(): bool
-  return has('win32') || has('win64')
-enddef
-
-def IsMac(): bool
-  return has('mac') || has('macunix')
-enddef
-
-def NormalizeSeparators(path: string): string
-  return substitute(path, '\\', '/', 'g')
-enddef
-
-def GetHomeDir(): string
-  var expanded = expand('~')
-  if !empty(expanded) && expanded !=# '~'
-    return TrimTrailingSeparators(fnamemodify(expanded, ':p'))
-  endif
-
-  if !empty($HOME)
-    return TrimTrailingSeparators(fnamemodify($HOME, ':p'))
-  endif
-
-  if !empty($USERPROFILE)
-    return TrimTrailingSeparators(fnamemodify($USERPROFILE, ':p'))
-  endif
-
-  if !empty($HOMEDRIVE) && !empty($HOMEPATH)
-    return TrimTrailingSeparators(fnamemodify($HOMEDRIVE .. $HOMEPATH, ':p'))
-  endif
-
-  return ''
-enddef
-
-def ExpandHomePath(path: string): string
-  if empty(path) || path[0] !=# '~'
-    return path
-  endif
-
-  if len(path) > 1 && path[1] !=# '/' && path[1] !=# '\'
-    return path
-  endif
-
-  var home = GetHomeDir()
-  if empty(home)
-    return path
-  endif
-
-  if path ==# '~'
-    return home
-  endif
-
-  return home .. '/' .. path[2 :]
-enddef
-
-def IsRootPath(path: string): bool
-  return path ==# '/'
-    || path =~? '^[A-Z]:/$'
-    || path =~? '^//[^/]\+/\?[^/]\+/$'
-enddef
-
-def TrimTrailingSeparators(path: string): string
-  var normalized = NormalizeSeparators(path)
-  if empty(normalized)
-    return ''
-  endif
-
-  if IsRootPath(normalized)
-    return normalized
-  endif
-
-  return substitute(normalized, '/\+$', '', '')
-enddef
-
-def JoinPath(base: string, child: string): string
-  if empty(base)
-    return NormalizePath(child)
-  endif
-
-  if empty(child)
-    return NormalizePath(base)
-  endif
-
-  var normalized_base = TrimTrailingSeparators(base)
-  if IsRootPath(normalized_base)
-    return NormalizePath(normalized_base .. child)
-  endif
-
-  return NormalizePath(normalized_base .. '/' .. child)
-enddef
-
-def IsAbsolutePath(path: string): bool
-  var normalized = NormalizeSeparators(ExpandHomePath(path))
-  return normalized =~# '^/'
-    || normalized =~? '^[A-Z]:/'
-    || normalized =~# '^//'
-enddef
-
-def ResolvePath(base: string, path: string): string
-  var expanded = ExpandHomePath(path)
-  return IsAbsolutePath(expanded) ? NormalizePath(expanded) : JoinPath(base, expanded)
-enddef
-
-def NormalizeDir(dir_arg: string): string
-  if empty(dir_arg)
-    return NormalizePath(getcwd())
-  endif
-
-  return NormalizePath(dir_arg)
-enddef
-
-def NormalizePath(path: string): string
-  if empty(path)
-    return ''
-  endif
-
-  return TrimTrailingSeparators(fnamemodify(ExpandHomePath(path), ':p'))
-enddef
-
-def HasCaseInsensitivePaths(): bool
-  return IsWindows()
-enddef
-
 def PathKey(path: string): string
   var normalized = NormalizePath(path)
-  return HasCaseInsensitivePaths() ? tolower(normalized) : normalized
+  return IsWindows() ? tolower(normalized) : normalized
 enddef
 
 def PathExists(path: string): bool
@@ -389,8 +271,111 @@ def IsDirectory(path: string): bool
   return isdirectory(path)
 enddef
 
+def IsRootPath(path: string): bool
+  return path ==# '/'
+    || path =~? '^[A-Z]:/$'
+    || path =~? '^//[^/]\+/\?[^/]\+/$'
+enddef
+
+def IsAbsolutePath(path: string): bool
+  var normalized = NormalizeSeparators(ExpandHomePath(path))
+  return normalized =~# '^/'
+    || normalized =~? '^[A-Z]:/'
+    || normalized =~# '^//'
+enddef
+
+def NativePath(path: string): string
+  return IsWindows() ? substitute(path, '/', '\\', 'g') : path
+enddef
+
 def Basename(path: string): string
   return fnamemodify(path, ':t')
+enddef
+
+def NormalizeSeparators(path: string): string
+  return substitute(path, '\\', '/', 'g')
+enddef
+
+def NormalizeDir(dir_arg: string): string
+  if empty(dir_arg)
+    return NormalizePath(getcwd())
+  endif
+  return NormalizePath(dir_arg)
+enddef
+
+def NormalizePath(path: string): string
+  if empty(path)
+    return ''
+  endif
+  return TrimTrailingSeparators(fnamemodify(ExpandHomePath(path), ':p'))
+enddef
+
+def GetHomeDir(): string
+  var expanded = expand('~')
+  if !empty(expanded) && expanded !=# '~'
+    return TrimTrailingSeparators(fnamemodify(expanded, ':p'))
+  endif
+  if !empty($HOME)
+    return TrimTrailingSeparators(fnamemodify($HOME, ':p'))
+  endif
+  if !empty($USERPROFILE)
+    return TrimTrailingSeparators(fnamemodify($USERPROFILE, ':p'))
+  endif
+  if !empty($HOMEDRIVE) && !empty($HOMEPATH)
+    return TrimTrailingSeparators(fnamemodify($HOMEDRIVE .. $HOMEPATH, ':p'))
+  endif
+  return ''
+enddef
+
+def ExpandHomePath(path: string): string
+  if empty(path) || path[0] !=# '~'
+    return path
+  endif
+  if len(path) > 1 && path[1] !=# '/' && path[1] !=# '\'
+    return path
+  endif
+  var home = GetHomeDir()
+  if empty(home)
+    return path
+  endif
+  if path ==# '~'
+    return home
+  endif
+  return home .. '/' .. path[2 :]
+enddef
+
+def TrimTrailingSeparators(path: string): string
+  var normalized = NormalizeSeparators(path)
+  if empty(normalized)
+    return ''
+  endif
+  if IsRootPath(normalized)
+    return normalized
+  endif
+  return substitute(normalized, '/\+$', '', '')
+enddef
+
+def JoinPath(base: string, child: string): string
+  if empty(base)
+    return NormalizePath(child)
+  endif
+  if empty(child)
+    return NormalizePath(base)
+  endif
+  var normalized_base = TrimTrailingSeparators(base)
+  if IsRootPath(normalized_base)
+    return NormalizePath(normalized_base .. child)
+  endif
+  return NormalizePath(normalized_base .. '/' .. child)
+enddef
+
+def ResolvePath(base: string, path: string): string
+  var expanded = ExpandHomePath(path)
+  return IsAbsolutePath(expanded) ? NormalizePath(expanded) : JoinPath(base, expanded)
+enddef
+
+def EntryDepthPrefix(depth: number): string
+  return repeat(' ', depth * ResolvedViewIndent())
 enddef
 
 def ParentDir(path: string): string
@@ -398,11 +383,9 @@ def ParentDir(path: string): string
   if empty(normalized)
     return ''
   endif
-
   if IsRootPath(normalized)
     return normalized
   endif
-
   return NormalizePath(fnamemodify(normalized, ':h'))
 enddef
 
@@ -412,7 +395,6 @@ def IsSameOrChildPath(parent: string, child: string): bool
   if normalized_parent ==# normalized_child
     return true
   endif
-
   var prefix = IsRootPath(normalized_parent) ? normalized_parent : normalized_parent .. '/'
   return stridx(normalized_child, prefix) == 0
 enddef
@@ -422,16 +404,13 @@ def FilesystemRoot(path: string): string
   if empty(normalized)
     return NormalizeDir(getcwd())
   endif
-
   if normalized =~? '^[A-Z]:/'
     return normalized[0 : 2]
   endif
-
   if normalized =~# '^//'
     var match = matchstr(normalized, '^//[^/]\+/\?[^/]\+')
     return empty(match) ? '/' : match
   endif
-
   return '/'
 enddef
 
@@ -441,10 +420,112 @@ def RelativePath(root: string, path: string): string
   if normalized_path ==# normalized_root
     return ''
   endif
-
   var prefix = IsRootPath(normalized_root) ? normalized_root : normalized_root .. '/'
   return stridx(normalized_path, prefix) == 0 ? strpart(normalized_path, len(prefix)) : normalized_path
 enddef
+
+def SafeReadDir(dir: string): list<string>
+  try
+    return readdir(dir)
+  catch
+    WarnUnreadableDir(dir)
+    return []
+  endtry
+enddef
+
+def CompareItems(dir: string, sort_mode: string, left_name: string, right_name: string): number
+  var left_path = JoinPath(dir, left_name)
+  var right_path = JoinPath(dir, right_name)
+  var left_dir = IsDirectory(left_path)
+  var right_dir = IsDirectory(right_path)
+  if left_dir != right_dir
+    return left_dir ? -1 : 1
+  endif
+  if sort_mode ==# 'size'
+    var left_size = left_dir ? 0 : getfsize(left_path)
+    var right_size = right_dir ? 0 : getfsize(right_path)
+    if left_size != right_size
+      return left_size > right_size ? -1 : 1
+    endif
+  elseif sort_mode ==# 'time'
+    var left_time = getftime(left_path)
+    var right_time = getftime(right_path)
+    if left_time != right_time
+      return left_time > right_time ? -1 : 1
+    endif
+  endif
+  return left_name ==# right_name ? 0 : (left_name <# right_name ? -1 : 1)
+enddef
+
+def SortedChildren(dir: string, sort_mode: string): list<string>
+  var names = SafeReadDir(dir)
+  sort(names, (left, right) => CompareItems(dir, sort_mode, left, right))
+  return names
+enddef
+
+def EnsureParentDir(path: string)
+  var parent = ParentDir(path)
+  if !isdirectory(parent)
+    mkdir(parent, 'p')
+  endif
+enddef
+
+def DeletePath(path: string)
+  if IsDirectory(path)
+    delete(path, 'rf')
+  else
+    delete(path)
+  endif
+enddef
+
+def MovePath(source: string, destination: string)
+  if rename(source, destination) != 0
+    throw $'Failed to move {source} to {destination}'
+  endif
+enddef
+
+# job
+
+def TrackJob(current_job: job)
+  CleanupFinishedJobs()
+  add(active_jobs, current_job)
+enddef
+
+def CleanupFinishedJobs()
+  var jobs: list<job> = []
+  for current_job in active_jobs
+    if job_status(current_job) ==# 'run'
+      add(jobs, current_job)
+    endif
+  endfor
+  active_jobs = jobs
+enddef
+
+def StartJob(cmd: list<string>): bool
+  if !exists('*job_start')
+    SetLastOpenError('job_start() is unavailable')
+    return false
+  endif
+  try
+    var current_job = job_start(cmd)
+    if type(current_job) == v:t_job
+      if job_status(current_job) ==# 'fail'
+        SetLastOpenError($'job_start() failed for {string(cmd)}')
+        return false
+      endif
+      TrackJob(current_job)
+      ClearLastOpenError()
+      return true
+    endif
+    SetLastOpenError($'job_start() did not return a job: {string(current_job)} for {string(cmd)}')
+    return false
+  catch
+    SetLastOpenError($'{v:exception} for {string(cmd)}')
+    return false
+  endtry
+enddef
+
+# entry
 
 def MakeEntry(kind: string, name: string, path: string, depth: number): dict<any>
   return {
@@ -459,9 +540,50 @@ def MakeFilesystemEntry(name: string, path: string, depth: number): dict<any>
   return MakeEntry(IsDirectory(path) ? ENTRY_DIR : ENTRY_FILE, name, path, depth)
 enddef
 
-def EntryDepthPrefix(depth: number): string
-  return repeat(' ', depth * ResolvedViewIndent())
+def EntryMtime(entry: dict<any>): number
+  return getftime(entry.path)
 enddef
+
+def EntryTimestamp(entry: dict<any>): string
+  var mtime = EntryMtime(entry)
+  return mtime < 0 ? TIMESTAMP_PLACEHOLDER : strftime(TIMESTAMP_FORMAT, mtime)
+enddef
+
+def EntrySize(entry: dict<any>): string
+  if entry.kind !=# ENTRY_FILE
+    return '     '
+  endif
+  var size = getfsize(entry.path)
+  if size < 0
+    return printf('%5s', TIMESTAMP_PLACEHOLDER)
+  endif
+  var units = ['B', 'K', 'M', 'G', 'T', 'P']
+  var value = str2float(string(size))
+  var unit_index = 0
+  while value >= 1024.0 && unit_index < len(units) - 1
+    value /= 1024.0
+    unit_index += 1
+  endwhile
+  var text = ''
+  if unit_index == 0
+    text = printf('%dB', float2nr(value))
+  elseif value < 10.0
+    text = printf('%.1f%s', value, units[unit_index])
+  else
+    text = printf('%.0f%s', value, units[unit_index])
+  endif
+  return printf('%5s', text)
+enddef
+
+def EntryUnderCursor(state: dict<any>): dict<any>
+  var index = line('.') - FIRST_ENTRY_LINE
+  if index < 0 || index >= len(state.entries)
+    return {}
+  endif
+  return state.entries[index]
+enddef
+
+# state
 
 def MakeState(dir: string): dict<any>
   return {
@@ -486,62 +608,11 @@ def EnsureState(): dict<any>
   return state_by_bufnr[bufnr]
 enddef
 
-def DoVisitDirAutocmd()
-  if empty(BufferDir())
-    return
-  endif
-
-  doautocmd <nomodeline> User FilerVisitDir
-enddef
-
-def CompareItems(dir: string, sort_mode: string, left_name: string, right_name: string): number
-  var left_path = JoinPath(dir, left_name)
-  var right_path = JoinPath(dir, right_name)
-  var left_dir = IsDirectory(left_path)
-  var right_dir = IsDirectory(right_path)
-
-  if left_dir != right_dir
-    return left_dir ? -1 : 1
-  endif
-
-  if sort_mode ==# 'size'
-    var left_size = left_dir ? 0 : getfsize(left_path)
-    var right_size = right_dir ? 0 : getfsize(right_path)
-    if left_size != right_size
-      return left_size > right_size ? -1 : 1
-    endif
-  elseif sort_mode ==# 'time'
-    var left_time = getftime(left_path)
-    var right_time = getftime(right_path)
-    if left_time != right_time
-      return left_time > right_time ? -1 : 1
-    endif
-  endif
-
-  return left_name ==# right_name ? 0 : (left_name <# right_name ? -1 : 1)
-enddef
-
-def SafeReadDir(dir: string): list<string>
-  try
-    return readdir(dir)
-  catch
-    WarnUnreadableDir(dir)
-    return []
-  endtry
-enddef
-
-def SortedChildren(dir: string, sort_mode: string): list<string>
-  var names = SafeReadDir(dir)
-  sort(names, (left, right) => CompareItems(dir, sort_mode, left, right))
-  return names
-enddef
-
 def AddTreeEntries(entries: list<dict<any>>, dir: string, depth: number, state: dict<any>)
   for name in SortedChildren(dir, state.sort_mode)
     var path = JoinPath(dir, name)
     var entry = MakeFilesystemEntry(name, path, depth)
     add(entries, entry)
-
     if entry.kind ==# ENTRY_DIR && get(state.expanded_dirs, path, false)
       AddTreeEntries(entries, path, depth + 1, state)
     endif
@@ -553,10 +624,8 @@ def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
   if has_key(visited, dir_key)
     return
   endif
-
   visited[dir_key] = true
   state.expanded_dirs[dir] = true
-
   for name in SafeReadDir(dir)
     var path = JoinPath(dir, name)
     if IsDirectory(path)
@@ -607,7 +676,7 @@ def JumpToPath(target_path: string)
   var state = state_by_bufnr[bufnr]
   for index in range(len(state.entries))
     if state.entries[index].path ==# target
-      cursor(EntryLine(index), 1)
+      cursor(FIRST_ENTRY_LINE + index, 1)
       return
     endif
   endfor
@@ -694,16 +763,13 @@ def TruncateDisplayText(text: string, max_width: number, marker: string = '...')
   if max_width <= 0
     return ''
   endif
-
   if strdisplaywidth(text) <= max_width
     return text
   endif
-
   var marker_width = strdisplaywidth(marker)
   if max_width <= marker_width
     return TruncateDisplayMarker(marker, max_width)
   endif
-
   var head = ''
   for char in split(text, '\zs')
     if strdisplaywidth(head .. char .. marker) > max_width
@@ -714,27 +780,10 @@ def TruncateDisplayText(text: string, max_width: number, marker: string = '...')
   return head .. marker
 enddef
 
-def EntryTruncationMarker(entry: dict<any>): string
-  return entry.kind ==# ENTRY_DIR ? '.../' : '...'
-enddef
-
-def EntryMtime(entry: dict<any>): number
-  return getftime(entry.path)
-enddef
-
-def EntryTimestampFromMtime(mtime: number): string
-  return mtime < 0 ? TIMESTAMP_PLACEHOLDER : strftime(TIMESTAMP_FORMAT, mtime)
-enddef
-
-def EntryTimestamp(entry: dict<any>): string
-  return EntryTimestampFromMtime(EntryMtime(entry))
-enddef
-
 def TimestampHighlightGroup(mtime: number): string
   if mtime < 0
     return 'FilerTimestampUnknown'
   endif
-
   var age = max([0, localtime() - mtime])
   if age <= SECONDS_PER_DAY
     return 'FilerTimestampVeryFresh'
@@ -747,7 +796,6 @@ def TimestampHighlightGroup(mtime: number): string
   elseif age <= 180 * SECONDS_PER_DAY
     return 'FilerTimestampOld'
   endif
-
   return 'FilerTimestampVeryOld'
 enddef
 
@@ -762,7 +810,6 @@ def HasVisibleTimestamp(line: string, timestamp: string): bool
   if timestamp_chars > line_chars
     return false
   endif
-
   return strcharpart(line, line_chars - timestamp_chars) ==# timestamp
 enddef
 
@@ -770,7 +817,6 @@ def ClearTimestampProps(bufnr: number, last_lnum: number)
   if !exists('*prop_clear') || last_lnum < 1
     return
   endif
-
   try
     prop_clear(1, last_lnum, {bufnr: bufnr, all: true})
   catch
@@ -781,12 +827,10 @@ def EnsureTimestampPropTypes(bufnr: number)
   if !exists('*prop_type_add')
     return
   endif
-
   for group in TIMESTAMP_HIGHLIGHT_GROUPS
     if hlexists(group) == 0
       continue
     endif
-
     try
       prop_type_add(group, {bufnr: bufnr, highlight: group})
     catch
@@ -798,7 +842,6 @@ def AddTimestampHighlight(bufnr: number, spec: dict<any>)
   if !exists('*prop_add') || hlexists(spec.group) == 0
     return
   endif
-
   try
     prop_add(spec.lnum, spec.col, {
       bufnr: bufnr,
@@ -817,56 +860,24 @@ def ApplyTimestampHighlights(bufnr: number, specs: list<dict<any>>, last_lnum: n
   endfor
 enddef
 
-def HumanFileSize(path: string): string
-  var size = getfsize(path)
-  if size < 0
-    return printf('%5s', TIMESTAMP_PLACEHOLDER)
-  endif
-
-  var units = ['B', 'K', 'M', 'G', 'T', 'P']
-  var value = str2float(string(size))
-  var unit_index = 0
-  while value >= 1024.0 && unit_index < len(units) - 1
-    value /= 1024.0
-    unit_index += 1
-  endwhile
-
-  var text = ''
-  if unit_index == 0
-    text = printf('%dB', float2nr(value))
-  elseif value < 10.0
-    text = printf('%.1f%s', value, units[unit_index])
-  else
-    text = printf('%.0f%s', value, units[unit_index])
-  endif
-  return printf('%5s', text)
-enddef
-
-def EntrySize(entry: dict<any>): string
-  if entry.kind !=# ENTRY_FILE
-    return '     '
-  endif
-
-  return HumanFileSize(entry.path)
+def EntryTruncationMarker(entry: dict<any>): string
+  return entry.kind ==# ENTRY_DIR ? '.../' : '...'
 enddef
 
 def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
   var name = DisplayName(state, entry)
-
   var size = EntrySize(entry)
   var timestamp = EntryTimestamp(entry)
   var meta = size .. ' ' .. timestamp
-
   if width <= META_RESERVED_WIDTH + 1
     return TruncateDisplayText(name, width, EntryTruncationMarker(entry))
   endif
-
   var name_width = width - META_RESERVED_WIDTH - 1
   var left = TruncateDisplayText(name, name_width, EntryTruncationMarker(entry))
   return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
 enddef
 
-def CurrentEntryPosition(state: dict<any>): number
+def EntryPositionUnderCursor(state: dict<any>): number
   var total = len(state.entries)
   if total == 0
     return 0
@@ -877,59 +888,17 @@ enddef
 def UpdateStatusline(state: dict<any>)
   var total = len(state.entries)
   var left = DisplayDir(state.cwd)
-  var right = $'{state.sort_mode} [{CurrentEntryPosition(state)}/{total}]'
+  var right = $'{state.sort_mode} [{EntryPositionUnderCursor(state)}/{total}]'
   &l:statusline = EscapeStatusline(left) .. '%=' .. EscapeStatusline(right)
 enddef
 
-def CurrentEntryIndex(state: dict<any>): number
-  return line('.') - FIRST_ENTRY_LINE
-enddef
-
-def CurrentEntry(state: dict<any>): dict<any>
-  var index = CurrentEntryIndex(state)
-  if index < 0 || index >= len(state.entries)
-    return {}
-  endif
-  return state.entries[index]
-enddef
-
-def CurrentPath(state: dict<any>): string
-  var entry = CurrentEntry(state)
+def PathUnderCursor(state: dict<any>): string
+  var entry = EntryUnderCursor(state)
   return empty(entry) ? '' : entry.path
 enddef
 
-def CurrentPathOrCwd(state: dict<any>): string
-  return line('.') == HEADER_LINE ? state.cwd : CurrentPath(state)
-enddef
-
-def NativePath(path: string): string
-  return IsWindows() ? substitute(path, '/', '\\', 'g') : path
-enddef
-
-def StartJob(cmd: list<string>): bool
-  if !exists('*job_start')
-    SetLastOpenError('job_start() is unavailable')
-    return false
-  endif
-
-  try
-    var current_job = job_start(cmd)
-    if type(current_job) == v:t_job
-      if job_status(current_job) ==# 'fail'
-        SetLastOpenError($'job_start() failed for {string(cmd)}')
-        return false
-      endif
-
-      TrackJob(current_job)
-      ClearLastOpenError()
-      return true
-    endif
-    SetLastOpenError($'job_start() did not return a job: {string(current_job)} for {string(cmd)}')
-    return false
-  catch
-    SetLastOpenError($'{v:exception} for {string(cmd)}')
-    return false
-  endtry
+def PathUnderCursorOrCwd(state: dict<any>): string
+  return line('.') == HEADER_LINE ? state.cwd : PathUnderCursor(state)
 enddef
 
 def SingleQuoteForPowerShell(path: string): string
@@ -957,11 +926,9 @@ def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
     return IsDirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
   endif
-
   if IsMac()
     return ['open', normalized]
   endif
-
   if executable('xdg-open') != 1
     SetLastOpenError('xdg-open is unavailable')
     return []
@@ -975,12 +942,10 @@ def OpenPathWithDefaultApplication(target: string): bool
     SetLastOpenError('empty target path')
     return false
   endif
-
   if !PathExists(normalized)
     SetLastOpenError($'target path does not exist: {normalized}')
     return false
   endif
-
   var cmd = OpenCommandForDefaultApplication(normalized)
   return len(cmd) > 0 && StartJob(cmd)
 enddef
@@ -1005,7 +970,7 @@ def Render()
       continue
     endif
     add(timestamp_highlights, {
-      lnum: EntryLine(index),
+      lnum: FIRST_ENTRY_LINE + index,
       col: TimestampColumn(line, timestamp),
       len: strlen(timestamp),
       group: TimestampHighlightGroup(EntryMtime(entry)),
@@ -1023,11 +988,11 @@ enddef
 
 def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>close<CR>
-  nnoremap <silent><buffer> <Plug>(filer-open) <Cmd>call filer#OpenCurrentEntry()<CR>
-  nnoremap <silent><buffer> <Plug>(filer-open-split) <Cmd>call filer#OpenCurrentEntry('split')<CR>
-  nnoremap <silent><buffer> <Plug>(filer-open-vsplit) <Cmd>call filer#OpenCurrentEntry('vsplit')<CR>
-  nnoremap <silent><buffer> <Plug>(filer-open-tab) <Cmd>call filer#OpenCurrentEntry('tabedit')<CR>
-  nnoremap <silent><buffer> <Plug>(filer-open-drop) <Cmd>call filer#OpenCurrentEntry('drop')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open) <Cmd>call filer#OpenEntryUnderCursor()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-split) <Cmd>call filer#OpenEntryUnderCursor('split')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-vsplit) <Cmd>call filer#OpenEntryUnderCursor('vsplit')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-tab) <Cmd>call filer#OpenEntryUnderCursor('tabedit')<CR>
+  nnoremap <silent><buffer> <Plug>(filer-open-drop) <Cmd>call filer#OpenEntryUnderCursor('drop')<CR>
   nnoremap <silent><buffer> <Plug>(filer-duplicate) <Cmd>call filer#DuplicateBuffer()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-tree) <Cmd>call filer#ToggleTree()<CR>
   nnoremap <silent><buffer> <Plug>(filer-toggle-tree-recursive) <Cmd>call filer#ExpandTreeRecursive()<CR>
@@ -1043,7 +1008,7 @@ def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-jump-first-entry) <Cmd>call filer#JumpToFirstEntry()<CR>
   nnoremap <silent><buffer> <Plug>(filer-rename-or-mark) <Cmd>call filer#RenameOrMark()<CR>
   nnoremap <silent><buffer> <Plug>(filer-open-external) <Cmd>call filer#OpenWithDefaultApplication()<CR>
-  nnoremap <silent><buffer> <Plug>(filer-yank-path) <Cmd>call filer#YankCurrentPathToClipboard()<CR>
+  nnoremap <silent><buffer> <Plug>(filer-yank-path) <Cmd>call filer#YankPathUnderCursorToClipboard()<CR>
   nnoremap <silent><buffer><expr> <Plug>(filer-search) filer#HandleCtrlF()
   nnoremap <silent><buffer> <Plug>(filer-cycle-sort) <Cmd>call filer#CycleSort()<CR>
 enddef
@@ -1074,14 +1039,12 @@ def SetupBuffer()
   setlocal filetype=filer
   setlocal syntax=filer
   setlocal laststatus=2
-
   augroup filer_buffer_lifecycle
     execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
     execute 'autocmd BufEnter <buffer=' .. current_bufnr .. '> doautocmd <nomodeline> User FilerVisitDir'
     execute 'autocmd BufHidden <buffer=' .. current_bufnr .. '> call ' .. expand('<SID>') .. 'ClearAllMarksForBuffer(' .. current_bufnr .. ')'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
   augroup END
-
   DefineFilerPlugMappings()
   ApplyFilerDefaultMappings()
 enddef
@@ -1102,48 +1065,18 @@ def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   DoVisitDirAutocmd()
 enddef
 
-def EnsureParentDir(path: string)
-  var parent = ParentDir(path)
-  if !isdirectory(parent)
-    mkdir(parent, 'p')
-  endif
-enddef
-
-def DeletePath(path: string)
-  if IsDirectory(path)
-    delete(path, 'rf')
-  else
-    delete(path)
-  endif
-enddef
-
-def MovePath(source: string, destination: string)
-  if rename(source, destination) != 0
-    throw $'Failed to move {source} to {destination}'
-  endif
-enddef
-
 def OpenFile(path: string, command: string = ''): bool
   if IsBrokenLink(path)
     WarnBrokenLink(path)
     return false
   endif
-
   execute ResolveFileOpenCommand(command) .. ' ' .. fnameescape(path)
   return true
 enddef
 
-def Prompt(prompt: string, default_value: string = ''): string
-  return input(prompt, default_value)
-enddef
-
-def Confirm(message: string): bool
-  return confirm(message, "&Yes\n&No", 2) == 1
-enddef
-
 def CanonicalizeBufferName(name: string): string
   var canonical = NormalizeSeparators(name)
-  return HasCaseInsensitivePaths() ? tolower(canonical) : canonical
+  return IsWindows() ? tolower(canonical) : canonical
 enddef
 
 def BufferNameInUse(name: string, current_bufnr: number): bool
@@ -1153,7 +1086,6 @@ def BufferNameInUse(name: string, current_bufnr: number): bool
       return true
     endif
   endfor
-
   return false
 enddef
 
@@ -1161,7 +1093,6 @@ def MakeUniqueBufferName(base: string, current_bufnr: number): string
   if !BufferNameInUse(base, current_bufnr)
     return base
   endif
-
   var suffix = 2
   var candidate = $'{base} ({suffix})'
   while BufferNameInUse(candidate, current_bufnr)
@@ -1206,20 +1137,17 @@ enddef
 def SetupRenameBuffer(context: dict<any>)
   var current_bufnr = bufnr('%')
   rename_state_by_bufnr[current_bufnr] = context
-
   setlocal buftype=acwrite
   setlocal bufhidden=hide
   setlocal noswapfile
   setlocal nowrap
   setlocal filetype=filer_rename
   setlocal syntax=
-
   augroup filer_rename_buffer_lifecycle
     execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
     execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyRenameBuffer()'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
   augroup END
-
   DefineBatchPlugMappings()
   ApplyBatchDefaultMappings()
 enddef
@@ -1227,20 +1155,17 @@ enddef
 def SetupCopyBuffer(context: dict<any>)
   var current_bufnr = bufnr('%')
   copy_state_by_bufnr[current_bufnr] = context
-
   setlocal buftype=acwrite
   setlocal bufhidden=hide
   setlocal noswapfile
   setlocal nowrap
   setlocal filetype=filer_copy
   setlocal syntax=
-
   augroup filer_copy_buffer_lifecycle
     execute 'autocmd! * <buffer=' .. current_bufnr .. '>'
     execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyCopyBuffer()'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
   augroup END
-
   DefineBatchPlugMappings()
   ApplyBatchDefaultMappings()
 enddef
@@ -1304,7 +1229,6 @@ def CollectCopyDestinations(context: dict<any>): list<string>
   if len(lines) != len(source_paths)
     throw $'Expected {len(source_paths)} lines, got {len(lines)}'
   endif
-
   var destinations: list<string> = []
   for line_text in lines
     if empty(line_text)
@@ -1332,42 +1256,34 @@ def CopyPath(source: string, destination: string)
   if PathExists(destination)
     DeletePath(destination)
   endif
-
   EnsureParentDir(destination)
   if IsDirectory(source)
     CopyDirectory(source, destination)
     return
   endif
-
   CopyFile(source, destination)
 enddef
 
 def ApplyBulkCopy(source_paths: list<string>, destination_paths: list<string>): list<string>
   var copied_paths: list<string> = []
-
   for index in range(len(source_paths))
     var source = source_paths[index]
     var destination = destination_paths[index]
     if PathKey(source) ==# PathKey(destination) && source ==# destination
       continue
     endif
-
     if !PathExists(source)
       throw $'Source does not exist: {source}'
     endif
-
     if IsSameOrChildPath(destination, source)
       throw $'Copy destination overlaps source and would remove it: {destination}'
     endif
-
     if IsDirectory(source) && IsSameOrChildPath(source, destination)
       throw $'Cannot copy a directory into itself: {source} -> {destination}'
     endif
-
     CopyPath(source, destination)
     add(copied_paths, destination)
   endfor
-
   return copied_paths
 enddef
 
@@ -1377,32 +1293,26 @@ def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>)
   var staged_moves: list<dict<any>> = []
   var final_moves: list<dict<any>> = []
   var renamed_paths: list<string> = []
-
   for path in source_paths
     source_set[PathKey(path)] = true
   endfor
-
   for index in range(len(source_paths))
     var source = source_paths[index]
     var destination = destination_paths[index]
     var source_key = PathKey(source)
     var destination_key = PathKey(destination)
-
     if has_key(destination_set, destination_key)
       throw $'Duplicate destination: {destination}'
     endif
     destination_set[destination_key] = true
-
     if source_key ==# destination_key && source ==# destination
       add(renamed_paths, source)
       continue
     endif
-
     if PathExists(destination) && !has_key(source_set, destination_key)
       throw $'Destination already exists: {destination}'
     endif
   endfor
-
   for index in range(len(source_paths))
     var source = source_paths[index]
     var destination = destination_paths[index]
@@ -1411,7 +1321,6 @@ def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>)
     if source_key ==# destination_key && source ==# destination
       continue
     endif
-
     if source_key ==# destination_key || has_key(source_set, destination_key)
       var temp_path = MakeTemporaryMovePath(source)
       MovePath(source, temp_path)
@@ -1422,24 +1331,20 @@ def ApplyBulkRename(source_paths: list<string>, destination_paths: list<string>)
       add(renamed_paths, destination)
       continue
     endif
-
     add(final_moves, {
       source: source,
       destination: destination,
     })
     add(renamed_paths, destination)
   endfor
-
   for move in final_moves
     EnsureParentDir(move.destination)
     MovePath(move.source, move.destination)
   endfor
-
   for move in staged_moves
     EnsureParentDir(move.destination)
     MovePath(move.temp_path, move.destination)
   endfor
-
   return renamed_paths
 enddef
 
@@ -1461,7 +1366,6 @@ def OpenOrReuse(dir: string, reset_tree: bool = true)
   if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
     enew
   endif
-
   OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
@@ -1560,9 +1464,9 @@ export def DuplicateBuffer(command: string = '')
   OpenFilerWithCommand(state.cwd, ResolveDuplicateCommand(command), false)
 enddef
 
-export def OpenCurrentEntry(command: string = '')
+export def OpenEntryUnderCursor(command: string = '')
   var state = EnsureState()
-  var entry = CurrentEntry(state)
+  var entry = EntryUnderCursor(state)
   if line('.') == HEADER_LINE
     entry = MakeEntry(ENTRY_DIR, state.cwd, state.cwd, 0)
   endif
@@ -1580,7 +1484,7 @@ enddef
 
 export def ToggleMark()
   var state = EnsureState()
-  var entry = CurrentEntry(state)
+  var entry = EntryUnderCursor(state)
   if empty(entry)
     return
   endif
@@ -1590,7 +1494,7 @@ export def ToggleMark()
     MarkEntry(state, entry)
   endif
   Render()
-  var next_line = EntryLine(CurrentEntryIndex(state) + 1)
+  var next_line = line('.') + 1
   var target_line = next_line > line('$') ? FIRST_ENTRY_LINE : next_line
   cursor(target_line, 1)
 enddef
@@ -1618,7 +1522,7 @@ export def ToggleTree()
   if !empty(state.file_search_query)
     return
   endif
-  var entry = CurrentEntry(state)
+  var entry = EntryUnderCursor(state)
   if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
@@ -1631,7 +1535,7 @@ export def ExpandTreeRecursive()
   if !empty(state.file_search_query)
     return
   endif
-  var entry = CurrentEntry(state)
+  var entry = EntryUnderCursor(state)
   if empty(entry) || entry.kind !=# ENTRY_DIR
     return
   endif
@@ -1661,8 +1565,7 @@ enddef
 
 export def ReopenCurrentDir()
   var state = EnsureState()
-  var current_dir = state.cwd
-  OpenFilerWithCommand(current_dir, 'edit')
+  OpenFilerWithCommand(state.cwd, 'edit')
 enddef
 
 export def CleanupStateForCurrentBuffer()
@@ -1714,7 +1617,7 @@ export def DeleteOrMark()
     DeleteMarked()
     return
   endif
-  MarkEntry(state, CurrentEntry(state))
+  MarkEntry(state, EntryUnderCursor(state))
   Render()
 enddef
 
@@ -1743,7 +1646,7 @@ export def RenameOrMark()
     OpenRenameBuffer(state, MarkedPaths(state))
     return
   endif
-  MarkEntry(state, CurrentEntry(state))
+  MarkEntry(state, EntryUnderCursor(state))
   Render()
 enddef
 
@@ -1753,7 +1656,7 @@ export def CopyOrMark()
     OpenCopyBuffer(state, MarkedPaths(state))
     return
   endif
-  MarkEntry(state, CurrentEntry(state))
+  MarkEntry(state, EntryUnderCursor(state))
   Render()
 enddef
 
@@ -1801,9 +1704,9 @@ export def ApplyCopyBuffer()
   execute 'bwipeout ' .. copy_bufnr
 enddef
 
-export def YankCurrentPathToClipboard()
+export def YankPathUnderCursorToClipboard()
   var state = EnsureState()
-  var path = CurrentPathOrCwd(state)
+  var path = PathUnderCursorOrCwd(state)
   if empty(path)
     return
   endif
@@ -1834,7 +1737,7 @@ enddef
 
 export def OpenWithDefaultApplication()
   var state = EnsureState()
-  var path = CurrentPathOrCwd(state)
+  var path = PathUnderCursorOrCwd(state)
   if empty(path)
     return
   endif

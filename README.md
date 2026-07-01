@@ -58,11 +58,11 @@ netrw.
 - `<Space>`: Toggle multi-selection.
 - `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
-- `c`: Mark the item on the current line when nothing is marked; otherwise open a batch copy buffer for all marked items.
-- `d`: Mark the item on the current line when nothing is marked; otherwise confirm and delete all marked items.
-- `r`: Mark the item on the current line when nothing is marked; otherwise open a batch rename buffer for all marked items.
-- `x`: Open the item on the current line with the OS default associated application. On the first line, open the current directory.
-- `yy`: Copy the full path of the current line to the clipboard register. On the first line, copy the current directory.
+- `c`: Mark the item under the cursor when nothing is marked; otherwise open a batch copy buffer for all marked items.
+- `d`: Mark the item under the cursor when nothing is marked; otherwise confirm and delete all marked items.
+- `r`: Mark the item under the cursor when nothing is marked; otherwise open a batch rename buffer for all marked items.
+- `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
+- `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
 - `<C-F>`: Recursively search for file names under the current directory. Submit an empty query to clear the search.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 

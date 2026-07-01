@@ -161,7 +161,8 @@ x		Open the item under the cursor with the OS default application.
 		On the header line, open the current filer directory.
 
 							*filer-yy*
-yy		Copy the full path of the current line to the clipboard register.
+yy		Copy the full path of the item under the cursor to the clipboard
+		register.
 		On the header line, copy the current filer directory.
 
 							*filer-CTRL-F*
