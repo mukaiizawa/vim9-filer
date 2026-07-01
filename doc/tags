@@ -6,7 +6,7 @@
 FilerVisitDir	filer.txt	/*FilerVisitDir*
 filer	filer.txt	/*filer*
 filer#BufferDir()	filer.txt	/*filer#BufferDir()*
-filer-CTRL-F	filer.txt	/*filer-CTRL-F*
+filer-N	filer.txt	/*filer-N*
 filer-S	filer.txt	/*filer-S*
 filer-a	filer.txt	/*filer-a*
 filer-batch-buffers	filer.txt	/*filer-batch-buffers*
@@ -28,6 +28,7 @@ filer-l	filer.txt	/*filer-l*
 filer-limitations	filer.txt	/*filer-limitations*
 filer-mappings	filer.txt	/*filer-mappings*
 filer-marks	filer.txt	/*filer-marks*
+filer-n	filer.txt	/*filer-n*
 filer-o	filer.txt	/*filer-o*
 filer-open	filer.txt	/*filer-open*
 filer-q	filer.txt	/*filer-q*
@@ -35,6 +36,7 @@ filer-r	filer.txt	/*filer-r*
 filer-root	filer.txt	/*filer-root*
 filer-s	filer.txt	/*filer-s*
 filer-search	filer.txt	/*filer-search*
+filer-slash	filer.txt	/*filer-slash*
 filer-sorting	filer.txt	/*filer-sorting*
 filer-space	filer.txt	/*filer-space*
 filer-star	filer.txt	/*filer-star*
