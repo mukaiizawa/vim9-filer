@@ -1447,7 +1447,6 @@ def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
   var current_bufnr = bufnr('%')
   execute 'file ' .. fnameescape(MakeBufferName(dir, current_bufnr))
   SetupBuffer()
-
   var bufnr = bufnr('%')
   var prev = has_key(state_by_bufnr, bufnr) ? state_by_bufnr[bufnr] : MakeState(dir)
   state_by_bufnr[bufnr] = prev
@@ -1721,11 +1720,11 @@ enddef
 
 export def DeleteMarked()
   var state = EnsureState()
-  var paths = MarkedPaths(state)
-  if len(paths) == 0
+  if !HasMarks(state)
     echo 'No marked paths'
     return
   endif
+  var paths = MarkedPaths(state)
   if !Confirm($'Delete {len(paths)} marked paths?')
     return
   endif
@@ -1740,9 +1739,8 @@ enddef
 
 export def RenameOrMark()
   var state = EnsureState()
-  var paths = MarkedPaths(state)
-  if len(paths) > 0
-    OpenRenameBuffer(state, paths)
+  if HasMarks(state)
+    OpenRenameBuffer(state, MarkedPaths(state))
     return
   endif
   MarkEntry(state, CurrentEntry(state))
@@ -1751,9 +1749,8 @@ enddef
 
 export def CopyOrMark()
   var state = EnsureState()
-  var paths = MarkedPaths(state)
-  if len(paths) > 0
-    OpenCopyBuffer(state, paths)
+  if HasMarks(state)
+    OpenCopyBuffer(state, MarkedPaths(state))
     return
   endif
   MarkEntry(state, CurrentEntry(state))
