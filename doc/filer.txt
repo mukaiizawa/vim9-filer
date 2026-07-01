@@ -165,8 +165,8 @@ yy		Copy the full path of the item under the cursor to the clipboard
 		register.
 		On the header line, copy the current filer directory.
 
-								*filer-slash*
-/		Recursively search for file names under the current filer
+								*filer-f*
+f		Recursively search for file names under the current filer
 		directory using a Vim regular expression.  Submit an empty query
 		to clear the search.
 		Matches are highlighted in the filer buffer without changing Vim's
@@ -317,7 +317,7 @@ g:filer_mappings
 		      'open_split': 's',
 		      'open_vsplit': 'v',
 		      'parent': 'H',
-		      'search': '/',
+		      'search': 'f',
 		      }
 
 		g:filer_mappings = {
@@ -423,7 +423,7 @@ Use "q" in a batch buffer to wipe it out without applying changes.
 ==============================================================================
 SEARCH							*filer-search*
 
-Search mode is enabled with |filer-slash|.  It recursively scans file names
+Search mode is enabled with |filer-f|.  It recursively scans file names
 under the current filer directory using a Vim regular expression and displays
 matching entries as paths relative to that directory.
 

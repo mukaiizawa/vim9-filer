@@ -19,6 +19,7 @@ filer-contents	filer.txt	/*filer-contents*
 filer-d	filer.txt	/*filer-d*
 filer-dot	filer.txt	/*filer-dot*
 filer-events	filer.txt	/*filer-events*
+filer-f	filer.txt	/*filer-f*
 filer-functions	filer.txt	/*filer-functions*
 filer-gg	filer.txt	/*filer-gg*
 filer-h	filer.txt	/*filer-h*
@@ -36,7 +37,6 @@ filer-r	filer.txt	/*filer-r*
 filer-root	filer.txt	/*filer-root*
 filer-s	filer.txt	/*filer-s*
 filer-search	filer.txt	/*filer-search*
-filer-slash	filer.txt	/*filer-slash*
 filer-sorting	filer.txt	/*filer-sorting*
 filer-space	filer.txt	/*filer-space*
 filer-star	filer.txt	/*filer-star*

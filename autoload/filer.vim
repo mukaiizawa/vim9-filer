@@ -58,7 +58,7 @@ const FILER_MAPPING_SPECS = [
   {action: 'rename_or_mark', lhs: 'r', plug: '<Plug>(filer-rename-or-mark)', nowait: false},
   {action: 'open_external', lhs: 'x', plug: '<Plug>(filer-open-external)', nowait: false},
   {action: 'yank_path', lhs: 'yy', plug: '<Plug>(filer-yank-path)', nowait: false},
-  {action: 'search', lhs: '/', plug: '<Plug>(filer-search)', nowait: true},
+  {action: 'search', lhs: 'f', plug: '<Plug>(filer-search)', nowait: true},
   {action: 'next_search_result', lhs: 'n', plug: '<Plug>(filer-next-search-result)', nowait: true},
   {action: 'previous_search_result', lhs: 'N', plug: '<Plug>(filer-previous-search-result)', nowait: true},
   {action: 'cycle_sort', lhs: 'S', plug: '<Plug>(filer-cycle-sort)', nowait: true},
