@@ -63,8 +63,8 @@ netrw.
 - `r`: Mark the item under the cursor when nothing is marked; otherwise open a batch rename buffer for all marked items.
 - `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
-- `/`: Recursively search for file names under the current directory. Submit an empty query to clear the search. Matches are highlighted in the filer buffer without changing Vim's search pattern.
-- `n` / `N`: Move to the next/previous filer search result while search mode is active. When search mode is inactive, use Vim's normal search navigation.
+- `/`: Recursively search for file names under the current directory using a Vim regular expression. Submit an empty query to clear the search. Matches are highlighted in the filer buffer without changing Vim's search pattern.
+- `n` / `N`: Move to the next/previous filer search match while search mode is active. When search mode is inactive, use Vim's normal search navigation.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
 
 ## Opening Customization
@@ -184,6 +184,7 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - Symbolic links are shown as directories when their targets are directories.
 - Selected items are marked with the configured mark icon. The default is `*`.
 - Marks are cleared when changing directories, changing search, when the `filer` buffer is hidden, or when it is closed.
+- Search patterns follow Vim's `ignorecase` and `smartcase` behavior. Invalid patterns are rejected without changing the current search.
 - Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
 - Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
 - The statusline right-aligns active search, sort mode, entry/result count, and mark count.

@@ -591,6 +591,7 @@ def MakeState(dir: string): dict<any>
     expanded_dirs: {dir: true},
     marked_paths: {},
     file_search_query: '',
+    search_matches: [],
     sort_mode: 'name',
   }
 enddef
@@ -641,14 +642,45 @@ def CollapseSubtreeRecursive(state: dict<any>, dir: string)
   endfor
 enddef
 
-def SearchTree(dir: string, root: string, state: dict<any>, entries: list<dict<any>>)
+def SearchCasePrefix(query: string): string
+  if &ignorecase && (!&smartcase || query !~# '\u')
+    return '\c'
+  endif
+  return '\C'
+enddef
+
+def SearchPattern(query: string): string
+  return empty(query) ? '' : SearchCasePrefix(query) .. query
+enddef
+
+def SearchPatternError(query: string): string
+  if empty(query)
+    return ''
+  endif
+  try
+    match('', SearchPattern(query))
+  catch
+    return v:exception
+  endtry
+  return ''
+enddef
+
+def SearchNameMatches(name: string, pattern: string): bool
+  try
+    return name =~ pattern
+  catch
+    return false
+  endtry
+enddef
+
+def SearchTree(dir: string, root: string, state: dict<any>, pattern: string, entries: list<dict<any>>)
   for name in SortedChildren(dir, state.sort_mode)
     var path = JoinPath(dir, name)
-    if stridx(tolower(name), tolower(state.file_search_query)) >= 0
+    if SearchNameMatches(name, pattern)
       add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
     endif
     if IsDirectory(path)
-      SearchTree(path, root, state, entries)
+      SearchTree(path, root, state, pattern, entries)
     endif
   endfor
 enddef
@@ -658,7 +690,7 @@ def BuildEntries(state: dict<any>): list<dict<any>>
   if empty(state.file_search_query)
     AddTreeEntries(entries, state.cwd, 0, state)
   else
-    SearchTree(state.cwd, state.cwd, state, entries)
+    SearchTree(state.cwd, state.cwd, state, SearchPattern(state.file_search_query), entries)
   endif
   return entries
 enddef
@@ -866,22 +898,25 @@ def EnsureSearchHighlightPropType(bufnr: number)
   endtry
 enddef
 
-def SearchHighlightSpecs(line: string, query: string, lnum: number): list<dict<any>>
+def SearchHighlightSpecs(line: string, pattern: string, lnum: number): list<dict<any>>
   var specs: list<dict<any>> = []
-  if empty(query)
+  if empty(pattern)
     return specs
   endif
-  var text = tolower(line)
-  var pattern = tolower(query)
   var start = 0
-  var length = strlen(pattern)
   while true
-    var index = stridx(text, pattern, start)
-    if index < 0
+    var found = matchstrpos(line, pattern, start)
+    var start_index: number = found[1]
+    var end_index: number = found[2]
+    if start_index < 0
       break
     endif
-    add(specs, {lnum: lnum, col: index + 1, len: strlen(query)})
-    start = index + length
+    if end_index > start_index
+      add(specs, {lnum: lnum, col: start_index + 1, len: end_index - start_index})
+      start = end_index
+    else
+      start = start_index + 1
+    endif
   endwhile
   return specs
 enddef
@@ -911,17 +946,25 @@ def EntryTruncationMarker(entry: dict<any>): string
   return entry.kind ==# ENTRY_DIR ? '.../' : '...'
 enddef
 
-def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
+def FormatEntryLineParts(state: dict<any>, entry: dict<any>, width: number): dict<any>
   var name = DisplayName(state, entry)
   var size = EntrySize(entry)
   var timestamp = EntryTimestamp(entry)
   var meta = size .. ' ' .. timestamp
   if width <= META_RESERVED_WIDTH + 1
-    return TruncateDisplayText(name, width, EntryTruncationMarker(entry))
+    var text = TruncateDisplayText(name, width, EntryTruncationMarker(entry))
+    return {line: text, searchable_text: text}
   endif
   var name_width = width - META_RESERVED_WIDTH - 1
   var left = TruncateDisplayText(name, name_width, EntryTruncationMarker(entry))
-  return left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta
+  return {
+    line: left .. repeat(' ', width - strdisplaywidth(left) - META_RESERVED_WIDTH) .. meta,
+    searchable_text: left,
+  }
+enddef
+
+def FormatEntryLine(state: dict<any>, entry: dict<any>, width: number): string
+  return FormatEntryLineParts(state, entry, width).line
 enddef
 
 def StatuslineText(state: dict<any>): string
@@ -1008,12 +1051,14 @@ def Render()
   var width = max([1, winwidth(0)])
   var timestamp_highlights: list<dict<any>> = []
   var search_highlights: list<dict<any>> = []
+  var search_pattern = SearchPattern(state.file_search_query)
   var lines = [TruncateDisplayText(DisplayDir(state.cwd), width)]
   for index in range(len(state.entries))
     var entry = state.entries[index]
-    var line = FormatEntryLine(state, entry, width)
+    var line_parts = FormatEntryLineParts(state, entry, width)
+    var line: string = line_parts.line
     add(lines, line)
-    extend(search_highlights, SearchHighlightSpecs(line, state.file_search_query, FIRST_ENTRY_LINE + index))
+    extend(search_highlights, SearchHighlightSpecs(line_parts.searchable_text, search_pattern, FIRST_ENTRY_LINE + index))
     var timestamp = EntryTimestamp(entry)
     if !HasVisibleTimestamp(line, timestamp)
       continue
@@ -1031,6 +1076,7 @@ def Render()
     deletebufline(bufnr, len(lines) + 1, line('$'))
   endif
   &l:modifiable = false
+  state.search_matches = search_highlights
   ApplyTimestampHighlights(bufnr, timestamp_highlights, max([previous_last_lnum, len(lines)]))
   ApplySearchHighlights(bufnr, search_highlights)
   &l:statusline = StatuslineText(state)
@@ -1769,10 +1815,85 @@ enddef
 export def SearchFiles()
   var state = EnsureState()
   var query = Prompt('Search filename: ')
+  var pattern_error = SearchPatternError(query)
+  if !empty(pattern_error)
+    echohl ErrorMsg
+    echomsg $'Invalid search pattern: {query} ({pattern_error})'
+    echohl None
+    return
+  endif
   state.file_search_query = query
   ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
+enddef
+
+def JumpSearchEntry(state: dict<any>, direction: number, count: number)
+  var total = len(state.entries)
+  if total == 0
+    return
+  endif
+  var target = line('.') - FIRST_ENTRY_LINE
+  if target < 0 || target >= total
+    target = direction > 0 ? -1 : 0
+  endif
+  var remaining = max([1, count])
+  while remaining > 0
+    target += direction > 0 ? 1 : -1
+    if target >= total
+      target = 0
+    elseif target < 0
+      target = total - 1
+    endif
+    remaining -= 1
+  endwhile
+  cursor(FIRST_ENTRY_LINE + target, 1)
+enddef
+
+def NextSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
+  var index = 0
+  while index < len(matches)
+    var match = matches[index]
+    if match.lnum > lnum || (match.lnum == lnum && match.col > col)
+      return index
+    endif
+    index += 1
+  endwhile
+  return 0
+enddef
+
+def PreviousSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
+  var index = len(matches) - 1
+  while index >= 0
+    var match = matches[index]
+    if match.lnum < lnum || (match.lnum == lnum && match.col < col)
+      return index
+    endif
+    index -= 1
+  endwhile
+  return len(matches) - 1
+enddef
+
+def JumpSearchMatch(state: dict<any>, direction: number, count: number)
+  var matches: list<dict<any>> = state.search_matches
+  if empty(matches)
+    JumpSearchEntry(state, direction, count)
+    return
+  endif
+  var target = direction > 0
+    ? NextSearchMatchIndex(matches, line('.'), col('.'))
+    : PreviousSearchMatchIndex(matches, line('.'), col('.'))
+  var remaining = max([1, count]) - 1
+  while remaining > 0
+    target += direction > 0 ? 1 : -1
+    if target >= len(matches)
+      target = 0
+    elseif target < 0
+      target = len(matches) - 1
+    endif
+    remaining -= 1
+  endwhile
+  cursor(matches[target].lnum, matches[target].col)
 enddef
 
 export def JumpSearchResult(direction: number, count: number = 1)
@@ -1783,23 +1904,7 @@ export def JumpSearchResult(direction: number, count: number = 1)
     execute 'normal! ' .. step_count .. key
     return
   endif
-  var total = len(state.entries)
-  if total == 0
-    return
-  endif
-  var target = line('.') - FIRST_ENTRY_LINE
-  if target < 0 || target >= total
-    target = direction > 0 ? -1 : 0
-  endif
-  for _ in range(step_count)
-    target += direction > 0 ? 1 : -1
-    if target >= total
-      target = 0
-    elseif target < 0
-      target = total - 1
-    endif
-  endfor
-  cursor(FIRST_ENTRY_LINE + target, 1)
+  JumpSearchMatch(state, direction, step_count)
 enddef
 
 export def CycleSort()
