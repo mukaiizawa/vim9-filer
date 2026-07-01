@@ -225,13 +225,6 @@ def ResolveDuplicateCommand(command: string = ''): string
   return ResolveOpenCommand(command, 'filer_duplicate_command', 'vsplit', FILER_OPEN_COMMANDS)
 enddef
 
-def DoVisitDirAutocmd()
-  if empty(BufferDir())
-    return
-  endif
-  doautocmd <nomodeline> User FilerVisitDir
-enddef
-
 # path and files
 
 def WarnBrokenLink(path: string)
@@ -360,10 +353,6 @@ enddef
 def ResolvePath(base: string, path: string): string
   var expanded = ExpandHomePath(path)
   return IsAbsolutePath(expanded) ? NormalizePath(expanded) : JoinPath(base, expanded)
-enddef
-
-def EntryDepthPrefix(depth: number): string
-  return repeat(' ', depth * ResolvedViewIndent())
 enddef
 
 def ParentDir(path: string): string
@@ -622,24 +611,6 @@ def EnsureState(): dict<any>
   return state_by_bufnr[bufnr]
 enddef
 
-# jump
-
-def JumpToPath(target_path: string)
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-  var target = NormalizePath(target_path)
-  var state = state_by_bufnr[bufnr]
-  for index in range(len(state.entries))
-    if state.entries[index].path ==# target
-      cursor(FIRST_ENTRY_LINE + index, 1)
-      return
-    endif
-  endfor
-  JumpToFirstEntry()
-enddef
-
 # search
 
 def SearchCasePrefix(query: string): string
@@ -671,6 +642,74 @@ def SearchNameMatches(name: string, pattern: string): bool
   catch
     return false
   endtry
+enddef
+
+def JumpSearchEntry(state: dict<any>, direction: number, count: number)
+  var total = len(state.entries)
+  if total == 0
+    return
+  endif
+  var target = line('.') - FIRST_ENTRY_LINE
+  if target < 0 || target >= total
+    target = direction > 0 ? -1 : 0
+  endif
+  var remaining = max([1, count])
+  while remaining > 0
+    target += direction > 0 ? 1 : -1
+    if target >= total
+      target = 0
+    elseif target < 0
+      target = total - 1
+    endif
+    remaining -= 1
+  endwhile
+  cursor(FIRST_ENTRY_LINE + target, 1)
+enddef
+
+def NextSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
+  var index = 0
+  while index < len(matches)
+    var match = matches[index]
+    if match.lnum > lnum || (match.lnum == lnum && match.col > col)
+      return index
+    endif
+    index += 1
+  endwhile
+  return 0
+enddef
+
+def PreviousSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
+  var index = len(matches) - 1
+  while index >= 0
+    var match = matches[index]
+    if match.lnum < lnum || (match.lnum == lnum && match.col < col)
+      return index
+    endif
+    index -= 1
+  endwhile
+  return len(matches) - 1
+enddef
+
+def JumpSearchMatch(state: dict<any>, direction: number, count: number)
+  var matches: list<dict<any>> = state.search_matches
+  if empty(matches)
+    JumpSearchEntry(state, direction, count)
+    return
+  endif
+  var target = direction > 0
+    ? NextSearchMatchIndex(matches, line('.'), col('.'))
+    : PreviousSearchMatchIndex(matches, line('.'), col('.'))
+  var remaining = max([1, count]) - 1
+  while remaining > 0
+    target += direction > 0 ? 1 : -1
+    if target >= len(matches)
+      target = 0
+    elseif target < 0
+      target = len(matches) - 1
+    endif
+    remaining -= 1
+  endwhile
+  cursor(matches[target].lnum, matches[target].col)
 enddef
 
 # tree
@@ -804,6 +843,10 @@ def DisplayDir(path: string): string
     return path
   endif
   return path .. '/'
+enddef
+
+def EntryDepthPrefix(depth: number): string
+  return repeat(' ', depth * ResolvedViewIndent())
 enddef
 
 def DisplayName(state: dict<any>, entry: dict<any>): string
@@ -1044,6 +1087,22 @@ def SetupBuffer()
   augroup END
   DefineFilerPlugMappings()
   ApplyFilerDefaultMappings()
+enddef
+
+def JumpToPath(target_path: string)
+  var bufnr = bufnr('%')
+  if !has_key(state_by_bufnr, bufnr)
+    return
+  endif
+  var target = NormalizePath(target_path)
+  var state = state_by_bufnr[bufnr]
+  for index in range(len(state.entries))
+    if state.entries[index].path ==# target
+      cursor(FIRST_ENTRY_LINE + index, 1)
+      return
+    endif
+  endfor
+  JumpToFirstEntry()
 enddef
 
 def OpenFile(path: string, command: string = ''): bool
@@ -1497,6 +1556,15 @@ def ApplyBatchDefaultMappings()
   ApplyMappingSpecs(BATCH_MAPPING_SPECS, 'filer_batch_mappings')
 enddef
 
+# event
+
+def DoVisitDirAutocmd()
+  if empty(BufferDir())
+    return
+  endif
+  doautocmd <nomodeline> User FilerVisitDir
+enddef
+
 # API
 
 export def JumpToFirstEntry()
@@ -1828,74 +1896,6 @@ export def SearchFiles()
   ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
-enddef
-
-def JumpSearchEntry(state: dict<any>, direction: number, count: number)
-  var total = len(state.entries)
-  if total == 0
-    return
-  endif
-  var target = line('.') - FIRST_ENTRY_LINE
-  if target < 0 || target >= total
-    target = direction > 0 ? -1 : 0
-  endif
-  var remaining = max([1, count])
-  while remaining > 0
-    target += direction > 0 ? 1 : -1
-    if target >= total
-      target = 0
-    elseif target < 0
-      target = total - 1
-    endif
-    remaining -= 1
-  endwhile
-  cursor(FIRST_ENTRY_LINE + target, 1)
-enddef
-
-def NextSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
-  var index = 0
-  while index < len(matches)
-    var match = matches[index]
-    if match.lnum > lnum || (match.lnum == lnum && match.col > col)
-      return index
-    endif
-    index += 1
-  endwhile
-  return 0
-enddef
-
-def PreviousSearchMatchIndex(matches: list<dict<any>>, lnum: number, col: number): number
-  var index = len(matches) - 1
-  while index >= 0
-    var match = matches[index]
-    if match.lnum < lnum || (match.lnum == lnum && match.col < col)
-      return index
-    endif
-    index -= 1
-  endwhile
-  return len(matches) - 1
-enddef
-
-def JumpSearchMatch(state: dict<any>, direction: number, count: number)
-  var matches: list<dict<any>> = state.search_matches
-  if empty(matches)
-    JumpSearchEntry(state, direction, count)
-    return
-  endif
-  var target = direction > 0
-    ? NextSearchMatchIndex(matches, line('.'), col('.'))
-    : PreviousSearchMatchIndex(matches, line('.'), col('.'))
-  var remaining = max([1, count]) - 1
-  while remaining > 0
-    target += direction > 0 ? 1 : -1
-    if target >= len(matches)
-      target = 0
-    elseif target < 0
-      target = len(matches) - 1
-    endif
-    remaining -= 1
-  endwhile
-  cursor(matches[target].lnum, matches[target].col)
 enddef
 
 export def JumpSearchResult(direction: number, count: number = 1)
