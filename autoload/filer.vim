@@ -236,10 +236,6 @@ def PathExists(path: string): bool
   return filereadable(path) || isdirectory(path) || getftype(path) ==# 'link'
 enddef
 
-def IsDirectory(path: string): bool
-  return isdirectory(path)
-enddef
-
 def IsRootPath(path: string): bool
   return path ==# '/'
     || path =~? '^[A-Z]:/$'
@@ -247,7 +243,7 @@ def IsRootPath(path: string): bool
 enddef
 
 def IsAbsolutePath(path: string): bool
-  var normalized = NormalizeSeparators(ExpandHomePath(path))
+  var normalized = FilerPath(ExpandHomePath(path))
   return normalized =~# '^/'
     || normalized =~? '^[A-Z]:/'
     || normalized =~# '^//'
@@ -257,15 +253,8 @@ def NativePath(path: string): string
   return IsWindows() ? substitute(path, '/', '\\', 'g') : path
 enddef
 
-def NormalizeSeparators(path: string): string
+def FilerPath(path: string): string
   return substitute(path, '\\', '/', 'g')
-enddef
-
-def NormalizeDir(dir_arg: string): string
-  if empty(dir_arg)
-    return NormalizePath(getcwd())
-  endif
-  return NormalizePath(dir_arg)
 enddef
 
 def NormalizePath(path: string): string
@@ -310,7 +299,7 @@ def ExpandHomePath(path: string): string
 enddef
 
 def TrimTrailingSeparators(path: string): string
-  var normalized = NormalizeSeparators(path)
+  var normalized = FilerPath(path)
   if empty(normalized)
     return ''
   endif
@@ -363,7 +352,7 @@ enddef
 def FilesystemRoot(path: string): string
   var normalized = NormalizePath(path)
   if empty(normalized)
-    return NormalizeDir(getcwd())
+    return NormalizePath(getcwd())
   endif
   if normalized =~? '^[A-Z]:/'
     return normalized[0 : 2]
@@ -376,7 +365,7 @@ def FilesystemRoot(path: string): string
 enddef
 
 def RelativePath(root: string, path: string): string
-  var normalized_root = NormalizeDir(root)
+  var normalized_root = NormalizePath(root)
   var normalized_path = NormalizePath(path)
   if normalized_path ==# normalized_root
     return ''
@@ -397,8 +386,8 @@ enddef
 def CompareItems(dir: string, sort_mode: string, left_name: string, right_name: string): number
   var left_path = JoinPath(dir, left_name)
   var right_path = JoinPath(dir, right_name)
-  var left_dir = IsDirectory(left_path)
-  var right_dir = IsDirectory(right_path)
+  var left_dir = isdirectory(left_path)
+  var right_dir = isdirectory(right_path)
   if left_dir != right_dir
     return left_dir ? -1 : 1
   endif
@@ -449,7 +438,7 @@ def CopyPath(source: string, destination: string)
     DeletePath(destination)
   endif
   EnsureParentDir(destination)
-  if IsDirectory(source)
+  if isdirectory(source)
     CopyDirectory(source, destination)
     return
   endif
@@ -457,7 +446,7 @@ def CopyPath(source: string, destination: string)
 enddef
 
 def DeletePath(path: string)
-  if IsDirectory(path)
+  if isdirectory(path)
     delete(path, 'rf')
   else
     delete(path)
@@ -523,7 +512,7 @@ def MakeEntry(kind: string, name: string, path: string, depth: number): dict<any
 enddef
 
 def MakeFilesystemEntry(name: string, path: string, depth: number): dict<any>
-  return MakeEntry(IsDirectory(path) ? ENTRY_DIR : ENTRY_FILE, name, path, depth)
+  return MakeEntry(isdirectory(path) ? ENTRY_DIR : ENTRY_FILE, name, path, depth)
 enddef
 
 def EntryMtime(entry: dict<any>): number
@@ -707,7 +696,7 @@ def ExpandSubtreeRecursive(state: dict<any>, dir: string, visited: dict<bool>)
   state.expanded_dirs[dir] = true
   for name in SafeReadDir(dir)
     var path = JoinPath(dir, name)
-    if IsDirectory(path)
+    if isdirectory(path)
       ExpandSubtreeRecursive(state, path, visited)
     endif
   endfor
@@ -746,7 +735,7 @@ enddef
 
 def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
-    return IsDirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
+    return isdirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
   endif
   if IsMac()
     return ['open', normalized]
@@ -994,7 +983,7 @@ def ApplyBulkCopy(source_paths: list<string>, destination_paths: list<string>): 
     if IsSameOrChildPath(destination, source)
       throw $'Copy destination overlaps source and would remove it: {destination}'
     endif
-    if IsDirectory(source) && IsSameOrChildPath(source, destination)
+    if isdirectory(source) && IsSameOrChildPath(source, destination)
       throw $'Cannot copy a directory into itself: {source} -> {destination}'
     endif
     CopyPath(source, destination)
@@ -1113,7 +1102,7 @@ enddef
 
 def SetCwd(state: dict<any>, dir: string, reset_tree: bool = false)
   var previous_dir = state.cwd
-  state.cwd = NormalizeDir(dir)
+  state.cwd = NormalizePath(dir)
   if !empty(previous_dir) && previous_dir !=# state.cwd
     state.file_search_query = ''
     ClearAllMarks(state)
@@ -1219,7 +1208,7 @@ def CloseBulkBuffer()
 enddef
 
 def CanonicalizeBufferName(name: string): string
-  var canonical = NormalizeSeparators(name)
+  var canonical = FilerPath(name)
   return IsWindows() ? tolower(canonical) : canonical
 enddef
 
@@ -1314,7 +1303,7 @@ def AppendSearchResultEntries(entries: list<dict<any>>, dir: string, root: strin
     if SearchNameMatches(name, pattern)
       add(entries, MakeFilesystemEntry(RelativePath(root, path), path, 0))
     endif
-    if IsDirectory(path)
+    if isdirectory(path)
       AppendSearchResultEntries(entries, path, root, state, pattern)
     endif
   endfor
@@ -1613,7 +1602,7 @@ export def RefreshResizedWindows()
 enddef
 
 export def Open(dir_arg: string = '', command: string = '', reset_tree: bool = true)
-  var dir = NormalizeDir(dir_arg)
+  var dir = NormalizePath(empty(dir_arg) ? getcwd() : dir_arg)
   if !isdirectory(dir)
     echoerr $'Not a directory: {dir}'
     return
@@ -1735,7 +1724,12 @@ export def GoParent()
 enddef
 
 export def GoHome()
-  OpenFilerWithCommand(NormalizeDir('~'), 'edit')
+  var home = GetHomeDir()
+  if empty(home)
+    echoerr 'Home directory is unavailable'
+    return
+  endif
+  OpenFilerWithCommand(home, 'edit')
 enddef
 
 export def GoRoot()
@@ -1940,8 +1934,8 @@ export def MaybeOpenDir(path: string)
   if &buftype !=# '' || &filetype ==# 'filer'
     return
   endif
-  var dir = NormalizeDir(path)
-  if empty(path) || !isdirectory(dir)
+  var dir = NormalizePath(path)
+  if !isdirectory(dir)
     return
   endif
   Open(dir)
