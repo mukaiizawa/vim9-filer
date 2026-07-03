@@ -58,9 +58,9 @@ netrw.
 - `<Space>`: Toggle multi-selection.
 - `*`: Toggle marking of all items in the current view.
 - `a`: Create a file or directory. Enter a trailing `/` to create a directory.
-- `c`: Mark the item under the cursor when nothing is marked; otherwise open a batch copy buffer for all marked items.
+- `c`: Mark the item under the cursor when nothing is marked; otherwise open a bulk copy buffer for all marked items.
 - `d`: Mark the item under the cursor when nothing is marked; otherwise confirm and delete all marked items.
-- `r`: Mark the item under the cursor when nothing is marked; otherwise open a batch rename buffer for all marked items.
+- `r`: Mark the item under the cursor when nothing is marked; otherwise open a bulk rename buffer for all marked items.
 - `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
 - `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
 - `f`: Recursively search for file names under the current directory using a Vim regular expression. Submit an empty query to clear the search. Matches are highlighted in the filer buffer without changing Vim's search pattern.
@@ -124,9 +124,7 @@ Default mappings can be disabled:
 g:filer_no_default_mappings = true
 
 autocmd FileType filer nmap <buffer> o <Plug>(filer-open)
-autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
-autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
-autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
+autocmd FileType filer,filer_rename,filer_copy nmap <buffer> q <Plug>(filer-close)
 ```
 
 Custom buffer-local mappings can also be defined directly with `<Plug>`
@@ -158,15 +156,8 @@ g:filer_mappings = {
 ```
 
 When `g:filer_no_default_mappings` is enabled, only explicitly configured
-actions in `g:filer_mappings` are mapped.
-
-Batch rename and copy buffers use `g:filer_batch_mappings`:
-
-```vim
-g:filer_batch_mappings = {
-      'close': 'q',
-      }
-```
+actions in `g:filer_mappings` are mapped. The `close` action also applies in
+bulk rename and copy buffers.
 
 Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 `open_vsplit`, `open_tab`, `open_drop`, `duplicate`, `toggle_tree`,
@@ -185,8 +176,9 @@ Available `g:filer_mappings` actions are `close`, `open`, `open_split`,
 - Selected items are marked with the configured mark icon. The default is `*`.
 - Marks are cleared when changing directories, changing search, when the `filer` buffer is hidden, or when it is closed.
 - Search patterns follow Vim's `ignorecase` and `smartcase` behavior. Invalid patterns are rejected without changing the current search.
-- Batch rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
-- Batch copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
+- Bulk rename opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to apply the rename.
+- Bulk copy opens a temporary buffer listing the marked paths. Edit the lines and write the buffer to copy only the changed entries.
+- `q` in a bulk rename or copy buffer closes that buffer and returns to the source filer buffer when it still exists.
 - The statusline right-aligns active search, sort mode, entry/result count, and mark count.
 - When `:syntax on` is enabled, the `filer` syntax file is loaded. Timestamps are color-coded by recency, from cool tones for newer entries to warm tones for older entries.
 - In a `filer` buffer, `~` is mapped to jump to the home directory, and `~` is also expanded in path input prompts.

@@ -9,9 +9,9 @@ filer#BufferDir()	filer.txt	/*filer#BufferDir()*
 filer-N	filer.txt	/*filer-N*
 filer-S	filer.txt	/*filer-S*
 filer-a	filer.txt	/*filer-a*
-filer-batch-buffers	filer.txt	/*filer-batch-buffers*
-filer-batch-copy	filer.txt	/*filer-batch-copy*
-filer-batch-rename	filer.txt	/*filer-batch-rename*
+filer-bulk-buffers	filer.txt	/*filer-bulk-buffers*
+filer-bulk-copy	filer.txt	/*filer-bulk-copy*
+filer-bulk-rename	filer.txt	/*filer-bulk-rename*
 filer-c	filer.txt	/*filer-c*
 filer-commands	filer.txt	/*filer-commands*
 filer-configuration	filer.txt	/*filer-configuration*
@@ -50,7 +50,6 @@ filer-yy	filer.txt	/*filer-yy*
 filer-zA	filer.txt	/*filer-zA*
 filer-za	filer.txt	/*filer-za*
 filer.txt	filer.txt	/*filer.txt*
-g:filer_batch_mappings	filer.txt	/*g:filer_batch_mappings*
 g:filer_buffer_dir_command	filer.txt	/*g:filer_buffer_dir_command*
 g:filer_directory_open_command	filer.txt	/*g:filer_directory_open_command*
 g:filer_duplicate_command	filer.txt	/*g:filer_duplicate_command*

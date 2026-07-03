@@ -63,8 +63,8 @@ const FILER_MAPPING_SPECS = [
   {action: 'previous_search_result', lhs: 'N', plug: '<Plug>(filer-previous-search-result)', nowait: true},
   {action: 'cycle_sort', lhs: 'S', plug: '<Plug>(filer-cycle-sort)', nowait: true},
 ]
-const BATCH_MAPPING_SPECS = [
-  {action: 'close', lhs: 'q', plug: '<Plug>(filer-batch-close)', nowait: false},
+const BULK_MAPPING_SPECS = [
+  {action: 'close', lhs: 'q', plug: '<Plug>(filer-close)', nowait: false},
 ]
 
 def SetLastOpenError(message: string)
@@ -990,7 +990,7 @@ def ValidateRenameSources(paths: list<string>)
   for i in range(len(paths))
     for j in range(i + 1, len(paths) - 1)
       if IsSameOrChildPath(paths[i], paths[j]) || IsSameOrChildPath(paths[j], paths[i])
-        throw $'Cannot batch rename nested paths at the same time: {paths[i]} / {paths[j]}'
+        throw $'Cannot bulk rename nested paths at the same time: {paths[i]} / {paths[j]}'
       endif
     endfor
   endfor
@@ -1201,8 +1201,8 @@ def SetupRenameBuffer(context: dict<any>)
     execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyRenameBuffer()'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
   augroup END
-  DefineBatchPlugMappings()
-  ApplyBatchDefaultMappings()
+  DefineBulkPlugMappings()
+  ApplyBulkDefaultMappings()
 enddef
 
 def SetupCopyBuffer(context: dict<any>)
@@ -1219,8 +1219,23 @@ def SetupCopyBuffer(context: dict<any>)
     execute 'autocmd BufWriteCmd <buffer=' .. current_bufnr .. '> call filer#ApplyCopyBuffer()'
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
   augroup END
-  DefineBatchPlugMappings()
-  ApplyBatchDefaultMappings()
+  DefineBulkPlugMappings()
+  ApplyBulkDefaultMappings()
+enddef
+
+def CloseBulkBuffer()
+  var bulk_bufnr = bufnr('%')
+  var context = {}
+  if has_key(rename_state_by_bufnr, bulk_bufnr)
+    context = rename_state_by_bufnr[bulk_bufnr]
+  elseif has_key(copy_state_by_bufnr, bulk_bufnr)
+    context = copy_state_by_bufnr[bulk_bufnr]
+  endif
+  var filer_bufnr = get(context, 'filer_bufnr', -1)
+  if filer_bufnr > 0 && bufexists(filer_bufnr) && has_key(state_by_bufnr, filer_bufnr)
+    execute 'buffer ' .. filer_bufnr
+  endif
+  execute 'bwipeout! ' .. bulk_bufnr
 enddef
 
 def CanonicalizeBufferName(name: string): string
@@ -1533,7 +1548,7 @@ enddef
 # mappings
 
 def DefineFilerPlugMappings()
-  nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>close<CR>
+  nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>call filer#Close()<CR>
   nnoremap <silent><buffer> <Plug>(filer-open) <Cmd>call filer#OpenEntryUnderCursor()<CR>
   nnoremap <silent><buffer> <Plug>(filer-open-split) <Cmd>call filer#OpenEntryUnderCursor('split')<CR>
   nnoremap <silent><buffer> <Plug>(filer-open-vsplit) <Cmd>call filer#OpenEntryUnderCursor('vsplit')<CR>
@@ -1565,12 +1580,12 @@ def ApplyFilerDefaultMappings()
   ApplyMappingSpecs(FILER_MAPPING_SPECS, 'filer_mappings')
 enddef
 
-def DefineBatchPlugMappings()
-  nnoremap <silent><buffer> <Plug>(filer-batch-close) <Cmd>bwipeout<CR>
+def DefineBulkPlugMappings()
+  nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>call filer#Close()<CR>
 enddef
 
-def ApplyBatchDefaultMappings()
-  ApplyMappingSpecs(BATCH_MAPPING_SPECS, 'filer_batch_mappings')
+def ApplyBulkDefaultMappings()
+  ApplyMappingSpecs(BULK_MAPPING_SPECS, 'filer_mappings')
 enddef
 
 # event
@@ -1772,6 +1787,15 @@ export def CleanupCopyBufferForCurrentBuffer()
   if has_key(copy_state_by_bufnr, bufnr)
     remove(copy_state_by_bufnr, bufnr)
   endif
+enddef
+
+export def Close()
+  var current_bufnr = bufnr('%')
+  if has_key(rename_state_by_bufnr, current_bufnr) || has_key(copy_state_by_bufnr, current_bufnr)
+    CloseBulkBuffer()
+    return
+  endif
+  close
 enddef
 
 export def Create()

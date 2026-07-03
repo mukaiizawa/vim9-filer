@@ -15,7 +15,7 @@ Events		|filer-events|
 Configuration	|filer-configuration|
 View		|filer-view|
 Marks		|filer-marks|
-Batch buffers	|filer-batch-buffers|
+Bulk buffers	|filer-bulk-buffers|
 Search		|filer-search|
 Sorting		|filer-sorting|
 Syntax		|filer-syntax|
@@ -143,7 +143,7 @@ a		Create a file or directory.  A trailing "/" or "\" creates a
 
 							*filer-c*
 c		When no items are marked, mark the item under the cursor.  When
-		items are marked, open a batch copy buffer for the marked items.
+		items are marked, open a bulk copy buffer for the marked items.
 
 							*filer-d*
 d		When no items are marked, mark the item under the cursor.  When
@@ -154,7 +154,7 @@ gg		Jump to the first entry.
 
 							*filer-r*
 r		When no items are marked, mark the item under the cursor.  When
-		items are marked, open a batch rename buffer for the marked items.
+		items are marked, open a bulk rename buffer for the marked items.
 
 							*filer-x*
 x		Open the item under the cursor with the OS default application.
@@ -292,9 +292,7 @@ g:filer_no_default_mappings
 		g:filer_no_default_mappings = true
 
 		autocmd FileType filer nmap <buffer> o <Plug>(filer-open)
-		autocmd FileType filer nmap <buffer> q <Plug>(filer-close)
-		autocmd FileType filer_rename nmap <buffer> q <Plug>(filer-batch-close)
-		autocmd FileType filer_copy nmap <buffer> q <Plug>(filer-batch-close)
+		autocmd FileType filer,filer_rename,filer_copy nmap <buffer> q <Plug>(filer-close)
 <
 
 		Custom buffer-local mappings can also be defined directly with
@@ -327,7 +325,8 @@ g:filer_mappings
 <
 
 		When |g:filer_no_default_mappings| is enabled, only explicitly
-		configured actions in g:filer_mappings are mapped.
+		configured actions in g:filer_mappings are mapped.  The close
+		action also applies in bulk rename and copy buffers.
 
 		Available action names:
 
@@ -357,17 +356,6 @@ g:filer_mappings
 		next_search_result	<Plug>(filer-next-search-result)
 		previous_search_result	<Plug>(filer-previous-search-result)
 		cycle_sort		<Plug>(filer-cycle-sort)
-
-							*g:filer_batch_mappings*
-g:filer_batch_mappings
-		Dictionary for changing default mappings in batch rename and
-		copy buffers.
-
->
-	g:filer_batch_mappings = {
-	      'close': 'q',
-	      }
-<
 
 ==============================================================================
 VIEW							*filer-view*
@@ -401,24 +389,25 @@ The delete, rename, and copy mappings use marks as their selection.  If no item
 is marked, these mappings first mark the item under the cursor.
 
 ==============================================================================
-BATCH BUFFERS						*filer-batch-buffers*
+BULK BUFFERS						*filer-bulk-buffers*
 
-							*filer-batch-rename*
-Batch rename opens a temporary buffer listing the marked paths.  Edit each line
+							*filer-bulk-rename*
+Bulk rename opens a temporary buffer listing the marked paths.  Edit each line
 to the destination path and write the buffer with |:write| to apply the rename.
 
 The number of lines must match the number of source paths, and destination lines
 cannot be empty.  Relative destinations are resolved from the filer directory.
 
-							*filer-batch-copy*
-Batch copy opens a temporary buffer listing the marked paths.  Edit each line to
+							*filer-bulk-copy*
+Bulk copy opens a temporary buffer listing the marked paths.  Edit each line to
 the destination path and write the buffer with |:write| to copy the changed
 entries.  Unchanged source and destination pairs are skipped.
 
 The number of lines must match the number of source paths, and destination lines
 cannot be empty.  Relative destinations are resolved from the filer directory.
 
-Use "q" in a batch buffer to wipe it out without applying changes.
+Use "q" in a bulk buffer to close it without applying changes.  When the
+source filer buffer still exists, the window returns to that filer buffer.
 
 ==============================================================================
 SEARCH							*filer-search*
