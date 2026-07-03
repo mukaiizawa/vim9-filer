@@ -1080,12 +1080,8 @@ def SetupBuffer()
 enddef
 
 def JumpToPath(target_path: string)
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
   var target = NormalizePath(target_path)
-  var state = state_by_bufnr[bufnr]
+  var state = EnsureState()
   for index in range(len(state.entries))
     if state.entries[index].path ==# target
       cursor(FIRST_ENTRY_LINE + index, 1)
@@ -1338,10 +1334,7 @@ enddef
 
 def Render()
   var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    return
-  endif
-  var state = state_by_bufnr[bufnr]
+  var state = EnsureState()
   var previous_last_lnum = line('$')
   state.entries = BuildEntries(state)
   var width = max([1, winwidth(0)])
@@ -1585,8 +1578,7 @@ export def BufferDir(bufnr: number = bufnr('%')): string
 enddef
 
 export def RefreshCurrentWindow()
-  var bufnr = bufnr('%')
-  if &filetype !=# 'filer' || !has_key(state_by_bufnr, bufnr)
+  if &filetype !=# 'filer'
     return
   endif
   Render()
