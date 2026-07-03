@@ -1600,6 +1600,7 @@ enddef
 # API
 
 export def JumpToFirstEntry()
+  normal! gg
   cursor(min([FIRST_ENTRY_LINE, line('$')]), 1)
 enddef
 
