@@ -95,6 +95,12 @@ def IsMac(): bool
   return has('mac') || has('macunix')
 enddef
 
+def EchohlError(message: string)
+  echohl ErrorMsg
+  echomsg substitute(message, '^Vim(.*):', '', '')
+  echohl None
+enddef
+
 # config
 
 def NoDefaultMappings(): bool
@@ -1922,7 +1928,11 @@ export def JumpSearchResult(direction: number, count: number = 1)
   var key = direction > 0 ? 'n' : 'N'
   var step_count = max([1, count])
   if empty(state.file_search_query)
-    execute 'normal! ' .. step_count .. key
+    try
+      silent execute 'normal! ' .. step_count .. key
+    catch
+      EchohlError(v:exception)
+    endtry
     return
   endif
   JumpSearchMatch(state, direction, step_count)
