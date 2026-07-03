@@ -712,30 +712,14 @@ enddef
 
 # external open
 
-def PowerShellCommand(script: string): list<string>
-  return ['powershell', '-NoProfile', '-Command', script]
-enddef
-
 def SingleQuoteForPowerShell(path: string): string
   return "'" .. substitute(path, "'", "''", 'g') .. "'"
 enddef
 
-def WindowsOpenFileCommand(normalized: string): list<string>
-  var native = NativePath(normalized)
-  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(native)
-  return PowerShellCommand(ps)
-enddef
-
-def WindowsOpenDirectoryCommand(normalized: string): list<string>
-  var native = NativePath(normalized)
-  var argument = '/n,"' .. native .. '"'
-  var ps = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell(argument)
-  return PowerShellCommand(ps)
-enddef
-
 def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
-    return isdirectory(normalized) ? WindowsOpenDirectoryCommand(normalized) : WindowsOpenFileCommand(normalized)
+    var script = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(NativePath(normalized))
+    return ['powershell', '-NoProfile', '-Command', script]
   endif
   if IsMac()
     return ['open', normalized]
