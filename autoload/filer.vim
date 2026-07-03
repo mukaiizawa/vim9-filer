@@ -1076,7 +1076,7 @@ def SetupBuffer()
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupStateForCurrentBuffer()'
   augroup END
   DefineFilerPlugMappings()
-  ApplyFilerDefaultMappings()
+  ApplyMappingSpecs(FILER_MAPPING_SPECS, 'filer_mappings')
 enddef
 
 def JumpToPath(target_path: string)
@@ -1125,15 +1125,15 @@ def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
   JumpToFirstEntry()
 enddef
 
-def OpenOrReuse(dir: string, reset_tree: bool = true)
-  var current_bufnr = bufnr('%')
-  if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
-    enew
+def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
+  if command ==# 'edit'
+    var current_bufnr = bufnr('%')
+    if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
+      enew
+    endif
+    OpenInCurrentBuffer(dir, reset_tree)
+    return
   endif
-  OpenInCurrentBuffer(dir, reset_tree)
-enddef
-
-def OpenEmptyWindow(command: string)
   if command ==# 'split'
     new
   elseif command ==# 'vsplit'
@@ -1141,14 +1141,6 @@ def OpenEmptyWindow(command: string)
   elseif command ==# 'tabedit'
     tabnew
   endif
-enddef
-
-def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
-  if command ==# 'edit'
-    OpenOrReuse(dir, reset_tree)
-    return
-  endif
-  OpenEmptyWindow(command)
   OpenInCurrentBuffer(dir, reset_tree)
 enddef
 
@@ -1167,7 +1159,7 @@ def SetupRenameBuffer(context: dict<any>)
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupRenameBufferForCurrentBuffer()'
   augroup END
   DefineBulkPlugMappings()
-  ApplyBulkDefaultMappings()
+  ApplyMappingSpecs(BULK_MAPPING_SPECS, 'filer_mappings')
 enddef
 
 def SetupCopyBuffer(context: dict<any>)
@@ -1185,7 +1177,7 @@ def SetupCopyBuffer(context: dict<any>)
     execute 'autocmd BufWipeout <buffer=' .. current_bufnr .. '> call filer#CleanupCopyBufferForCurrentBuffer()'
   augroup END
   DefineBulkPlugMappings()
-  ApplyBulkDefaultMappings()
+  ApplyMappingSpecs(BULK_MAPPING_SPECS, 'filer_mappings')
 enddef
 
 def CloseBulkBuffer()
@@ -1235,20 +1227,12 @@ def MakeBufferName(dir: string, current_bufnr: number): string
   return MakeUniqueBufferName('[filer] ' .. dir, current_bufnr)
 enddef
 
-def MakeRenameBufferName(cwd: string, current_bufnr: number): string
-  return MakeUniqueBufferName('[filer-rename] ' .. cwd, current_bufnr)
-enddef
-
-def MakeCopyBufferName(cwd: string, current_bufnr: number): string
-  return MakeUniqueBufferName('[filer-copy] ' .. cwd, current_bufnr)
-enddef
-
 def OpenRenameBuffer(state: dict<any>, paths: list<string>)
   ValidateRenameSources(paths)
   var filer_bufnr = bufnr('%')
   enew
   var rename_bufnr = bufnr('%')
-  execute 'file ' .. fnameescape(MakeRenameBufferName(state.cwd, rename_bufnr))
+  execute 'file ' .. fnameescape(MakeUniqueBufferName('[filer-rename] ' .. state.cwd, rename_bufnr))
   SetupRenameBuffer({
     filer_bufnr: filer_bufnr,
     cwd: state.cwd,
@@ -1266,7 +1250,7 @@ def OpenCopyBuffer(state: dict<any>, paths: list<string>)
   var filer_bufnr = bufnr('%')
   enew
   var copy_bufnr = bufnr('%')
-  execute 'file ' .. fnameescape(MakeCopyBufferName(state.cwd, copy_bufnr))
+  execute 'file ' .. fnameescape(MakeUniqueBufferName('[filer-copy] ' .. state.cwd, copy_bufnr))
   SetupCopyBuffer({
     filer_bufnr: filer_bufnr,
     cwd: state.cwd,
@@ -1538,16 +1522,8 @@ def DefineFilerPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-cycle-sort) <Cmd>call filer#CycleSort()<CR>
 enddef
 
-def ApplyFilerDefaultMappings()
-  ApplyMappingSpecs(FILER_MAPPING_SPECS, 'filer_mappings')
-enddef
-
 def DefineBulkPlugMappings()
   nnoremap <silent><buffer> <Plug>(filer-close) <Cmd>call filer#Close()<CR>
-enddef
-
-def ApplyBulkDefaultMappings()
-  ApplyMappingSpecs(BULK_MAPPING_SPECS, 'filer_mappings')
 enddef
 
 # event
