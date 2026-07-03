@@ -371,7 +371,6 @@ When the window is too narrow to fit the metadata area, each entry falls back to
 showing only the name.
 
 Symbolic links are shown as directories when their targets are directories.
-Broken symbolic links are reported when filer tries to open them.
 
 The statusline right-aligns active search, sort mode, entry/result count, and
 mark count.

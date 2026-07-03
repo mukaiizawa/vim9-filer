@@ -67,16 +67,12 @@ const BULK_MAPPING_SPECS = [
   {action: 'close', lhs: 'q', plug: '<Plug>(filer-close)', nowait: false},
 ]
 
-def SetLastOpenError(message: string)
-  last_open_error = message
+def IsWindows(): bool
+  return has('win32') || has('win64')
 enddef
 
-def ClearLastOpenError()
-  last_open_error = ''
-enddef
-
-def GetLastOpenError(): string
-  return last_open_error
+def IsMac(): bool
+  return has('mac') || has('macunix')
 enddef
 
 def Prompt(prompt: string, default_value: string = ''): string
@@ -87,12 +83,10 @@ def Confirm(message: string): bool
   return confirm(message, "&Yes\n&No", 2) == 1
 enddef
 
-def IsWindows(): bool
-  return has('win32') || has('win64')
-enddef
-
-def IsMac(): bool
-  return has('mac') || has('macunix')
+def EchohlWarning(message: string)
+  echohl WarningMsg
+  echomsg message
+  echohl None
 enddef
 
 def EchohlError(message: string)
@@ -233,18 +227,6 @@ enddef
 
 # path and files
 
-def WarnBrokenLink(path: string)
-  echohl WarningMsg
-  echomsg $'Broken symbolic link: {path}'
-  echohl None
-enddef
-
-def WarnUnreadableDir(path: string)
-  echohl WarningMsg
-  echomsg $'Cannot read directory: {path}'
-  echohl None
-enddef
-
 def PathKey(path: string): string
   var normalized = NormalizePath(path)
   return IsWindows() ? tolower(normalized) : normalized
@@ -252,10 +234,6 @@ enddef
 
 def PathExists(path: string): bool
   return filereadable(path) || isdirectory(path) || getftype(path) ==# 'link'
-enddef
-
-def IsBrokenLink(path: string): bool
-  return getftype(path) ==# 'link' && !filereadable(path) && !isdirectory(path)
 enddef
 
 def IsDirectory(path: string): bool
@@ -411,7 +389,7 @@ def SafeReadDir(dir: string): list<string>
   try
     return readdir(dir)
   catch
-    WarnUnreadableDir(dir)
+    EchohlWarning($'Cannot read directory: {dir}')
     return []
   endtry
 enddef
@@ -511,24 +489,24 @@ enddef
 
 def StartJob(cmd: list<string>): bool
   if !exists('*job_start')
-    SetLastOpenError('job_start() is unavailable')
+    last_open_error = 'job_start() is unavailable'
     return false
   endif
   try
     var current_job = job_start(cmd)
     if type(current_job) == v:t_job
       if job_status(current_job) ==# 'fail'
-        SetLastOpenError($'job_start() failed for {string(cmd)}')
+        last_open_error = $'job_start() failed for {string(cmd)}'
         return false
       endif
       TrackJob(current_job)
-      ClearLastOpenError()
+      last_open_error = ''
       return true
     endif
-    SetLastOpenError($'job_start() did not return a job: {string(current_job)} for {string(cmd)}')
+    last_open_error = $'job_start() did not return a job: {string(current_job)} for {string(cmd)}'
     return false
   catch
-    SetLastOpenError($'{v:exception} for {string(cmd)}')
+    last_open_error = $'{v:exception} for {string(cmd)}'
     return false
   endtry
 enddef
@@ -774,7 +752,7 @@ def OpenCommandForDefaultApplication(normalized: string): list<string>
     return ['open', normalized]
   endif
   if executable('xdg-open') != 1
-    SetLastOpenError('xdg-open is unavailable')
+    last_open_error = 'xdg-open is unavailable'
     return []
   endif
   return ['xdg-open', normalized]
@@ -783,11 +761,11 @@ enddef
 def OpenPathWithDefaultApplication(target: string): bool
   var normalized = NormalizePath(target)
   if empty(normalized)
-    SetLastOpenError('empty target path')
+    last_open_error = 'empty target path'
     return false
   endif
   if !PathExists(normalized)
-    SetLastOpenError($'target path does not exist: {normalized}')
+    last_open_error = $'target path does not exist: {normalized}'
     return false
   endif
   var cmd = OpenCommandForDefaultApplication(normalized)
@@ -1129,10 +1107,6 @@ def JumpToPath(target_path: string)
 enddef
 
 def OpenFile(path: string, command: string = ''): bool
-  if IsBrokenLink(path)
-    WarnBrokenLink(path)
-    return false
-  endif
   execute ResolveFileOpenCommand(command) .. ' ' .. fnameescape(path)
   return true
 enddef
@@ -1912,9 +1886,7 @@ export def SearchFiles()
   var query = Prompt('Search filename: ')
   var pattern_error = SearchPatternError(query)
   if !empty(pattern_error)
-    echohl ErrorMsg
-    echomsg $'Invalid search pattern: {query} ({pattern_error})'
-    echohl None
+    EchohlError($'Invalid search pattern: {query} ({pattern_error})')
     return
   endif
   state.file_search_query = query
@@ -1949,18 +1921,19 @@ enddef
 export def OpenWithDefaultApplication()
   var state = EnsureState()
   var path = TargetPathUnderCursor(state)
-  if IsBrokenLink(path)
-    WarnBrokenLink(path)
+  if getftype(path) ==# 'link' && !filereadable(path) && !isdirectory(path)
+    EchohlWarning($'Broken symbolic link: {path}')
     return
   endif
   if OpenPathWithDefaultApplication(path)
     echo $'Opening with default application: {path}'
     return
   endif
-  var reason = GetLastOpenError()
-  echoerr empty(reason)
-    ? $'Failed to open with default application: {path}'
-    : $'Failed to open with default application: {path} ({reason})'
+  var message = $'Failed to open with default application: {path}'
+  if !empty(last_open_error)
+    message ..= $' ({last_open_error})'
+  endif
+  echoerr message
 enddef
 
 export def MaybeOpenDir(path: string)
