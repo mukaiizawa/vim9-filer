@@ -572,16 +572,21 @@ def MakeState(dir: string): dict<any>
   }
 enddef
 
-def MissingStateError(bufnr: number): string
-  return $'filer state is missing for buffer {bufnr} ({bufname(bufnr)}); filetype={&filetype}; cwd={getcwd()}; close and reopen the filer buffer'
+def StateKey(bufnr_value: number): string
+  return string(bufnr_value)
 enddef
 
-def EnsureState(): dict<any>
-  var bufnr = bufnr('%')
-  if !has_key(state_by_bufnr, bufnr)
-    throw MissingStateError(bufnr)
+def HasState(bufnr_value: number): bool
+  return has_key(state_by_bufnr, StateKey(bufnr_value))
+enddef
+
+def EnsureState(bufnr_value: number = bufnr('%')): dict<any>
+  var key = StateKey(bufnr_value)
+  if !has_key(state_by_bufnr, key)
+    var filetype = getbufvar(bufnr_value, '&filetype')
+    throw $'filer state is missing for buffer {bufnr_value} ({bufname(bufnr_value)}); filetype={filetype}; cwd={getcwd()}; close and reopen the filer buffer'
   endif
-  return state_by_bufnr[bufnr]
+  return state_by_bufnr[key]
 enddef
 
 # search
@@ -782,8 +787,8 @@ def ClearAllMarks(state: dict<any>)
 enddef
 
 def ClearAllMarksForBuffer(bufnr: number)
-  if has_key(state_by_bufnr, bufnr)
-    ClearAllMarks(state_by_bufnr[bufnr])
+  if HasState(bufnr)
+    ClearAllMarks(EnsureState(bufnr))
   endif
 enddef
 
@@ -876,27 +881,6 @@ def TargetPathUnderCursor(state: dict<any>): string
     return state.cwd
   endif
   return entry.path
-enddef
-
-# delete
-
-def DeleteMarked()
-  var state = EnsureState()
-  if !HasMarks(state)
-    echo 'No marked paths'
-    return
-  endif
-  var paths = MarkedPaths(state)
-  if !Confirm($'Delete {len(paths)} marked paths?')
-    return
-  endif
-  for path in paths
-    if PathExists(path)
-      DeletePath(path)
-    endif
-  endfor
-  ClearAllMarks(state)
-  Render()
 enddef
 
 # bulk copy, bulk rename
@@ -1101,8 +1085,8 @@ def OpenInCurrentBuffer(dir: string, reset_tree: bool = true)
   execute 'file ' .. fnameescape(MakeBufferName(dir, current_bufnr))
   SetupBuffer()
   var bufnr = bufnr('%')
-  var prev = has_key(state_by_bufnr, bufnr) ? state_by_bufnr[bufnr] : MakeState(dir)
-  state_by_bufnr[bufnr] = prev
+  var prev = HasState(bufnr) ? EnsureState(bufnr) : MakeState(dir)
+  state_by_bufnr[StateKey(bufnr)] = prev
   SetCwd(prev, dir, reset_tree)
   ClearInvalidMarks(prev)
   Render()
@@ -1112,7 +1096,7 @@ enddef
 def OpenFilerWithCommand(dir: string, command: string, reset_tree: bool = true)
   if command ==# 'edit'
     var current_bufnr = bufnr('%')
-    if &filetype !=# 'filer' || !has_key(state_by_bufnr, current_bufnr)
+    if &filetype !=# 'filer' || !HasState(current_bufnr)
       enew
     endif
     OpenInCurrentBuffer(dir, reset_tree)
@@ -1173,7 +1157,7 @@ def CloseBulkBuffer()
     context = copy_state_by_bufnr[bulk_bufnr]
   endif
   var filer_bufnr = get(context, 'filer_bufnr', -1)
-  if filer_bufnr > 0 && bufexists(filer_bufnr) && has_key(state_by_bufnr, filer_bufnr)
+  if filer_bufnr > 0 && bufexists(filer_bufnr) && HasState(filer_bufnr)
     execute 'buffer ' .. filer_bufnr
   endif
   execute 'bwipeout! ' .. bulk_bufnr
@@ -1531,10 +1515,10 @@ export def ResolvedViewIcons(): dict<any>
 enddef
 
 export def BufferDir(bufnr: number = bufnr('%')): string
-  if !has_key(state_by_bufnr, bufnr)
+  if !HasState(bufnr)
     return ''
   endif
-  return get(state_by_bufnr[bufnr], 'cwd', '')
+  return get(EnsureState(bufnr), 'cwd', '')
 enddef
 
 export def RefreshCurrentWindow()
@@ -1696,9 +1680,9 @@ enddef
 
 export def CleanupStateForCurrentBuffer()
   var bufnr = bufnr('%')
-  if has_key(state_by_bufnr, bufnr)
+  if HasState(bufnr)
     ClearTimestampProps(bufnr, line('$'))
-    remove(state_by_bufnr, bufnr)
+    remove(state_by_bufnr, StateKey(bufnr))
   endif
 enddef
 
@@ -1749,7 +1733,17 @@ enddef
 export def DeleteOrMark()
   var state = EnsureState()
   if HasMarks(state)
-    DeleteMarked()
+    var paths = MarkedPaths(state)
+    if !Confirm($'Delete {len(paths)} marked paths?')
+      return
+    endif
+    for path in paths
+      if PathExists(path)
+        DeletePath(path)
+      endif
+    endfor
+    ClearAllMarks(state)
+    Render()
     return
   endif
   MarkEntry(state, EntryUnderCursor(state))
@@ -1786,12 +1780,12 @@ export def ApplyRenameBuffer()
   var renamed_paths = ApplyBulkRename(context.source_paths, destination_paths)
   setlocal nomodified
   var filer_bufnr = context.filer_bufnr
-  if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
+  if !bufexists(filer_bufnr) || !HasState(filer_bufnr)
     echo $'Renamed {len(renamed_paths)} entries'
     return
   endif
   execute 'buffer ' .. filer_bufnr
-  var state = state_by_bufnr[filer_bufnr]
+  var state = EnsureState(filer_bufnr)
   ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
@@ -1808,12 +1802,12 @@ export def ApplyCopyBuffer()
   var copied_paths = ApplyBulkCopy(context.source_paths, destination_paths)
   setlocal nomodified
   var filer_bufnr = context.filer_bufnr
-  if !bufexists(filer_bufnr) || !has_key(state_by_bufnr, filer_bufnr)
+  if !bufexists(filer_bufnr) || !HasState(filer_bufnr)
     echo $'Copied {len(copied_paths)} entries'
     return
   endif
   execute 'buffer ' .. filer_bufnr
-  var state = state_by_bufnr[filer_bufnr]
+  var state = EnsureState(filer_bufnr)
   ClearAllMarks(state)
   Render()
   JumpToFirstEntry()
