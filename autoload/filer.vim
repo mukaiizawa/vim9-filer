@@ -1824,7 +1824,8 @@ export def YankPathUnderCursorToClipboard()
   var state = EnsureState()
   var path = TargetPathUnderCursor(state)
   setreg('+', path)
-  echo $'Copied to clipboard: {path}'
+  setreg('"', path)
+  echo $'Copied to clipboard and unnamed register: {path}'
 enddef
 
 export def SearchFiles()

@@ -62,7 +62,7 @@ netrw.
 - `d`: Mark the item under the cursor when nothing is marked; otherwise confirm and delete all marked items.
 - `r`: Mark the item under the cursor when nothing is marked; otherwise open a bulk rename buffer for all marked items.
 - `x`: Open the item under the cursor with the OS default associated application. On the first line, open the current directory.
-- `yy`: Copy the full path of the item under the cursor to the clipboard register. On the first line, copy the current directory.
+- `yy`: Copy the full path of the item under the cursor to the clipboard and unnamed registers. On the first line, copy the current directory.
 - `f`: Recursively search for file names under the current directory using a Vim regular expression. Submit an empty query to clear the search. Matches are highlighted in the filer buffer without changing Vim's search pattern.
 - `n` / `N`: Move to the next/previous filer search match while search mode is active. When search mode is inactive, use Vim's normal search navigation.
 - `S`: Cycle sort mode: `name` -> `size` -> `time`.
