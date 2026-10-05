@@ -723,7 +723,13 @@ enddef
 
 def OpenCommandForDefaultApplication(normalized: string): list<string>
   if IsWindows()
-    var script = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. SingleQuoteForPowerShell(NativePath(normalized))
+    # job_start() launches PowerShell with SW_HIDE. Opening a folder in that
+    # process hides an existing Explorer window for the same folder, so start
+    # explorer.exe as a separate process with a normal window state instead.
+    var launch = isdirectory(normalized)
+      ? 'explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell('"' .. NativePath(normalized) .. '"')
+      : SingleQuoteForPowerShell(NativePath(normalized))
+    var script = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. launch
     return ['powershell', '-NoProfile', '-Command', script]
   endif
   if IsMac()
