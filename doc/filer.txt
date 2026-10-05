@@ -454,7 +454,7 @@ drives on Windows is not supported.
 
 Opening items with the OS default application uses:
 
-	Windows		powershell Start-Process; explorer.exe for directories
+	Windows		|:!start|
 	macOS		open
 	Other Unix	xdg-open
 

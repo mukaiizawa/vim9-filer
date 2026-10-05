@@ -717,21 +717,7 @@ enddef
 
 # external open
 
-def SingleQuoteForPowerShell(path: string): string
-  return "'" .. substitute(path, "'", "''", 'g') .. "'"
-enddef
-
 def OpenCommandForDefaultApplication(normalized: string): list<string>
-  if IsWindows()
-    # job_start() launches PowerShell with SW_HIDE. Opening a folder in that
-    # process hides an existing Explorer window for the same folder, so start
-    # explorer.exe as a separate process with a normal window state instead.
-    var launch = isdirectory(normalized)
-      ? 'explorer.exe -ArgumentList ' .. SingleQuoteForPowerShell('"' .. NativePath(normalized) .. '"')
-      : SingleQuoteForPowerShell(NativePath(normalized))
-    var script = '$ErrorActionPreference = ''Stop''; Start-Process -FilePath ' .. launch
-    return ['powershell', '-NoProfile', '-Command', script]
-  endif
   if IsMac()
     return ['open', normalized]
   endif
@@ -740,6 +726,26 @@ def OpenCommandForDefaultApplication(normalized: string): list<string>
     return []
   endif
   return ['xdg-open', normalized]
+enddef
+
+def OpenPathOnWindows(normalized: string): bool
+  # job_start() launches processes with SW_HIDE, which hides an existing
+  # Explorer window for the same folder. ":!start" falls back to
+  # ShellExecute() in Vim itself, which reuses and activates that window.
+  var native = NativePath(normalized)
+  # ":!start" tries CreateProcess() first, which appends ".exe" to a path
+  # without an extension. A trailing separator keeps a directory such as
+  # "app" from launching a sibling "app.exe".
+  if isdirectory(normalized) && native !~ '\\$'
+    native ..= '\'
+  endif
+  execute 'silent !start ' .. escape($'"{native}"', '%#!')
+  if v:shell_error != 0
+    last_open_error = $'":!start" failed with exit code {v:shell_error}'
+    return false
+  endif
+  last_open_error = ''
+  return true
 enddef
 
 def OpenPathWithDefaultApplication(target: string): bool
@@ -751,6 +757,9 @@ def OpenPathWithDefaultApplication(target: string): bool
   if !PathExists(normalized)
     last_open_error = $'target path does not exist: {normalized}'
     return false
+  endif
+  if IsWindows()
+    return OpenPathOnWindows(normalized)
   endif
   var cmd = OpenCommandForDefaultApplication(normalized)
   return len(cmd) > 0 && StartJob(cmd)
